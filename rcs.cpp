@@ -38,7 +38,7 @@ int rcsAccept(int socketID, struct sockaddr_in * addr) {
 
 }
 
-// connects a client to a server. The socket (first argu- ment) must have been bound beforehand using rcsBind().
+// connects a client to a server. The socket (first argument) must have been bound beforehand using rcsBind().
 // The second argument identifies the server to which connection should be attempted. Returns 0 on success.
 int rcsConnect(int socketID, const struct sockaddr_in * addr) {
 
