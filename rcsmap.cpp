@@ -42,13 +42,9 @@ int RcsConn::send(const void * buf, int numBytes) {
 }
 
 
-RcsMap::RcsMap() {
+RcsMap::RcsMap(): nextId(0) {}
 
-}
-
-RcsMap::~RcsMap() {
-
-}
+RcsMap::~RcsMap() {}
 
 RcsConn & RcsMap::get(unsigned int sockId) {
     std::map<unsigned int, RcsConn>::iterator it = map.find(sockId);
