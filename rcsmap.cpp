@@ -51,11 +51,21 @@ RcsMap::~RcsMap() {
 }
 
 RcsConn & RcsMap::get(unsigned int sockId) {
-
+    std::map<unsigned int, RcsConn>::iterator it = map.find(sockId);
+    if (it == map.end()) {
+        throw NotFound();
+    }
+    return it.second;
 }
 
 RcsConn & RcsMap::newConn() {
-
+    return map[nextId++];
 }
 
-
+int RcsMap::close(unsigned int sockId) {
+    if (map.erase(sockId)) {
+        return 0;
+    } else {
+        return -1;
+    }
+}
