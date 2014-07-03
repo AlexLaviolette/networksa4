@@ -89,5 +89,5 @@ int rcsSend(int socketID, const void * sendBuffer, int numBytes) {
 
 // closes an RCS socket descriptor. Returns 0 on success.
 int rcsClose(int socketID) {
-	return 0;
+	return rcsMap.close(socketId);
 }

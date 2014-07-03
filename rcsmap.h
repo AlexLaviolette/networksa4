@@ -29,5 +29,6 @@ class RcsMap {
         ~RcsMap();
         RcsConn & get(unsigned int sockId);
         RcsConn & newConn();
+        int close(unsigned int sockId);
 };
 
