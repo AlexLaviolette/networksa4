@@ -18,4 +18,13 @@ class RcsConn {
         int send(const void * buf, int numBytes);
 };
 
-typedef std::map<unsigned int, RcsConn> RcsMap;
+class RcsMap {
+    std::map<unsigned int, RcsConn> map;
+    unsigned int nextId;
+
+    public:
+        RcsMap();
+        ~RcsMap();
+        RcsConn & get(unsigned int sockId);
+        RcsConn & newConn();
+};
