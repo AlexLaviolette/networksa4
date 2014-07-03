@@ -24,8 +24,10 @@ class RcsMap {
     unsigned int nextId;
 
     public:
+        class NotFound: public Exception {};
         RcsMap();
         ~RcsMap();
         RcsConn & get(unsigned int sockId);
         RcsConn & newConn();
 };
+
