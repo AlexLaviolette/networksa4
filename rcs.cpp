@@ -67,7 +67,7 @@ int rcsConnect(int socketID, const struct sockaddr_in * addr) {
 // the buffer which is filled with received data. The maximum amount of data that may be written is identified
 // by the third argument. Returns the actual amount of data received. “Amount” is the number of bytes. Data is
 // sent and received reliably, so any byte that is returned by this call should be what was sent, and in the correct order.
-int wcsRecv(int socketID, void * rcvBuffer, int maxBytes) {
+int rcsRecv(int socketID, void * rcvBuffer, int maxBytes) {
     try {
         return rcsMap.get(socketId).recv(rcvBuffer, maxBytes);
     } catch (RcsMap::NotFound n) {
