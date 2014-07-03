@@ -16,6 +16,7 @@ class RcsConn {
         int connect(const sockaddr_in * addr);
         int recv(void * buf, int maxBytes);
         int send(const void * buf, int numBytes);
+        int getSocketID();
 };
 
 class RcsMap {
