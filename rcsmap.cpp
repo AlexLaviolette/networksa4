@@ -5,24 +5,22 @@
 
 RcsConn::RcsConn(): ucp_sock(ucpSocket()) {}
 
-RcsConn::~RcsConn() {
-
-}
+RcsConn::~RcsConn() {}
 
 int RcsConn::getSocketID() {
     return ucp_sock;
 }
 
 int RcsConn::bind(const sockaddr_in * addr) {
-
+    return ucpBind(ucp_sock, addr);
 }
 
 int RcsConn::getSockName(sockaddr_in * addr) {
-
+    return ucpGetSockName(ucp_sock, addr);
 }
 
 int RcsConn::listen() {
-
+    
 }
 
 int RcsConn::accept() {
@@ -59,9 +57,11 @@ RcsConn & RcsMap::newConn() {
 }
 
 int RcsMap::close(unsigned int sockId) {
-    if (map.erase(sockId)) {
-        return 0;
-    } else {
+    std::map<unsigned int, RcsConn>::iterator it = map.find(sockId);
+    if (it == map.end()) {
         return -1;
     }
+    int ret = ucpClose(it.second.getSockId());
+    map.erase(it);
+    return ret;
 }
