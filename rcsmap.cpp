@@ -1,6 +1,7 @@
 #include <map>
 #include <queue>
 #include "rcsmap.h"
+#include "mybind.cpp"
 
 
 RcsConn::RcsConn(): ucp_sock(ucpSocket()) {}
@@ -11,8 +12,8 @@ int RcsConn::getSocketID() {
     return ucp_sock;
 }
 
-int RcsConn::bind(const sockaddr_in * addr) {
-    return ucpBind(ucp_sock, addr);
+int RcsConn::bind(sockaddr_in * addr) {
+    return mybind(ucp_sock, addr);
 }
 
 int RcsConn::getSockName(sockaddr_in * addr) {
@@ -20,11 +21,11 @@ int RcsConn::getSockName(sockaddr_in * addr) {
 }
 
 int RcsConn::listen() {
-    
+    return 0;
 }
 
-int RcsConn::accept() {
-
+int RcsConn::accept(sockaddr_in * addr) {
+    
 }
 
 int RcsConn::connect(const sockaddr_in * addr) {

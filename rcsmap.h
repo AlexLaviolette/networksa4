@@ -9,10 +9,10 @@ class RcsConn {
     public:
         RcsConn();
         ~RcsConn();
-        int bind(const sockaddr_in * addr);
+        int bind(sockaddr_in * addr);
         int getSockName(sockaddr_in * addr);
         int listen();
-        int accept();
+        int accept(sockaddr_in * addr);
         int connect(const sockaddr_in * addr);
         int recv(void * buf, int maxBytes);
         int send(const void * buf, int numBytes);
