@@ -3,6 +3,11 @@
 #include "rcsmap.h"
 #include "mybind.cpp"
 
+#define CONNECT_TIMEOUT 1000
+#define HEADER_LEN 5
+#define SYN_BIT 0x4
+#define ACK_BIT 0x2
+#define FIN_BIT 0x1
 
 RcsConn::RcsConn(): ucp_sock(ucpSocket()) {}
 
@@ -29,7 +34,34 @@ int RcsConn::accept(sockaddr_in * addr) {
 }
 
 int RcsConn::connect(const sockaddr_in * addr) {
+    destination = *addr;
 
+    sockaddr_in local_addr;
+    getSockName(&local_addr);
+
+    ucpSetSockRecvTimeout(ucp_sock, CONNECT_TIMEOUT);
+
+    char request[64] = {0};
+    char response[64] = {0};
+    memcpy(request + HEADER_LEN, &local_addr, sizeof(sockaddr_in));
+    set_flags(request, SYN_BIT);
+    set_length(request, sizeof(sockaddr_in));
+    set_checksum(request);
+
+    while (1) {
+        ucpSendTo(ucp_sock, request, HEADER_LEN + sizeof(sockaddr_in), &destination);
+        ucpRecvFrom(ucp_sock, response, 64, &destination);
+        if (errno & (EAGAIN | EWOULDBLOCK)) continue;
+        if (is_corrupt(response)) continue;
+        if ((get_flags(response) & (SYN_BIT|ACK_BIT)) != (SYN_BIT|ACK_BIT)) continue;
+        break;
+    }
+
+    set_flags(response, ACK_BIT);
+    set_checksum(response);
+    ucpSendTo(ucp_sock, response, HEADER_LEN + get_length(response), &destination);
+
+    return 0;
 }
 
 int RcsConn::recv(void * buf, int maxBytes) {
