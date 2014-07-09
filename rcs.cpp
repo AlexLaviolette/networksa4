@@ -9,7 +9,7 @@ RcsMap rcsMap;
 
 //  used to allocate an RCS socket. No arguments. Returns a socket descriptor (positive integer) on success.
 int rcsSocket() {
-	return rcsMap.newConn().getSocketId();
+	return rcsMap.newConn().first;
 }
 
 // binds an RCS socket (first argument) to the address structure (second argument). Returns 0 on success.

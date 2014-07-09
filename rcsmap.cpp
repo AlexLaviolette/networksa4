@@ -1,5 +1,6 @@
 #include <map>
 #include <queue>
+#include <string.h>
 #include "rcsmap.h"
 #include "mybind.cpp"
 
@@ -29,8 +30,29 @@ int RcsConn::listen() {
     return 0;
 }
 
-int RcsConn::accept(sockaddr_in * addr) {
-    
+int RcsConn::accept(sockaddr_in * addr, RcsMap & map) {
+    ucpSetSockRecvTimeout(ucp_sock, CONNECT_TIMEOUT);
+
+    char request[HEADER_LEN] = {0};
+    char response[HEADER_LEN] = {0};
+
+    while (1) {
+        ucpRecvFrom(ucp_sock, request, HEADER_LEN, addr);
+        if (errno & (EAGAIN | EWOULDBLOCK)) continue;
+        if (is_corrupt(request)) continue;
+        if ((get_flags(request) & (SYN_BIT|ACK_BIT)) != SYN_BIT) continue;
+        break;
+    }
+
+    std::pair<unsigned int, RcsConn &> newConn = map.newConn();
+    newConn.second.destination = *addr;
+    // Next, figure out what to bind this connection to
+    // then send the response through the new socket
+    // and wait for an ACK
+    if (!newConn.second.bind(addr)) {
+        map.close(newConn.first);
+        return -1;
+    }
 }
 
 int RcsConn::connect(const sockaddr_in * addr) {
@@ -41,16 +63,14 @@ int RcsConn::connect(const sockaddr_in * addr) {
 
     ucpSetSockRecvTimeout(ucp_sock, CONNECT_TIMEOUT);
 
-    char request[64] = {0};
-    char response[64] = {0};
-    memcpy(request + HEADER_LEN, &local_addr, sizeof(sockaddr_in));
+    char request[HEADER_LEN] = {0};
+    char response[HEADER_LEN] = {0};
     set_flags(request, SYN_BIT);
-    set_length(request, sizeof(sockaddr_in));
     set_checksum(request);
 
     while (1) {
-        ucpSendTo(ucp_sock, request, HEADER_LEN + sizeof(sockaddr_in), &destination);
-        ucpRecvFrom(ucp_sock, response, 64, &destination);
+        ucpSendTo(ucp_sock, request, HEADER_LEN, &destination);
+        ucpRecvFrom(ucp_sock, response, HEADER_LEN, &destination);
         if (errno & (EAGAIN | EWOULDBLOCK)) continue;
         if (is_corrupt(response)) continue;
         if ((get_flags(response) & (SYN_BIT|ACK_BIT)) != (SYN_BIT|ACK_BIT)) continue;
@@ -59,7 +79,7 @@ int RcsConn::connect(const sockaddr_in * addr) {
 
     set_flags(response, ACK_BIT);
     set_checksum(response);
-    ucpSendTo(ucp_sock, response, HEADER_LEN + get_length(response), &destination);
+    ucpSendTo(ucp_sock, response, HEADER_LEN, &destination);
 
     return 0;
 }
@@ -70,6 +90,10 @@ int RcsConn::recv(void * buf, int maxBytes) {
 
 int RcsConn::send(const void * buf, int numBytes) {
 
+}
+
+int RcsConn::close() {
+    return ucpClose(ucp_sock);
 }
 
 
@@ -85,8 +109,8 @@ RcsConn & RcsMap::get(unsigned int sockId) {
     return it.second;
 }
 
-RcsConn & RcsMap::newConn() {
-    return map[nextId++];
+std::pair<unsigned int, RcsConn &> RcsMap::newConn() {
+    return std::pair(nextId, map[nextId++]);
 }
 
 int RcsMap::close(unsigned int sockId) {
@@ -94,7 +118,7 @@ int RcsMap::close(unsigned int sockId) {
     if (it == map.end()) {
         return -1;
     }
-    int ret = ucpClose(it.second.getSockId());
+    int ret = it.second.close();
     map.erase(it);
     return ret;
 }

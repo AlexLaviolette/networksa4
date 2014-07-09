@@ -1,5 +1,6 @@
 #include <map>
 #include <queue>
+#include <utility>
 
 class RcsConn {
     unsigned int ucp_sock;
@@ -16,6 +17,7 @@ class RcsConn {
         int connect(const sockaddr_in * addr);
         int recv(void * buf, int maxBytes);
         int send(const void * buf, int numBytes);
+        int close();
         int getSocketID();
 };
 
@@ -28,7 +30,7 @@ class RcsMap {
         RcsMap();
         ~RcsMap();
         RcsConn & get(unsigned int sockId);
-        RcsConn & newConn();
+        std::pair<unsigned int, RcsConn &> newConn();
         int close(unsigned int sockId);
 };
 
