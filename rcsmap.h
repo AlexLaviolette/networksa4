@@ -3,6 +3,8 @@
 #include <utility>
 #include <netinet/in.h>
 
+class RcsMap;
+
 class RcsConn {
     unsigned int ucp_sock;
     sockaddr_in destination;
@@ -15,7 +17,7 @@ class RcsConn {
         int bind(sockaddr_in * addr);
         int getSockName(sockaddr_in * addr);
         int listen();
-        int accept(sockaddr_in * addr);
+        int accept(sockaddr_in * addr, RcsMap & map);
         int connect(const sockaddr_in * addr);
         int recv(void * buf, int maxBytes);
         int send(const void * buf, int numBytes);

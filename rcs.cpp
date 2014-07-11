@@ -14,7 +14,7 @@ int rcsSocket() {
 }
 
 // binds an RCS socket (first argument) to the address structure (second argument). Returns 0 on success.
-int rcsBind(int socketID, const struct sockaddr_in * addr) {
+int rcsBind(int socketID, sockaddr_in * addr) {
     try {
         return rcsMap.get(socketID).bind(addr);
     } catch (RcsMap::NotFound n) {
@@ -24,7 +24,7 @@ int rcsBind(int socketID, const struct sockaddr_in * addr) {
 
 // fills in the address information into the second argument with which an RCS socket (first argument)
 // has been bound via a call to rcsBind(). Returns 0 on success.
-int rcsGetSockName(int socketID, struct sockaddr_in * addr){
+int rcsGetSockName(int socketID, sockaddr_in * addr){
     try {
         return rcsMap.get(socketID).getSockName(addr);
     } catch (RcsMap::NotFound n) {
@@ -35,7 +35,7 @@ int rcsGetSockName(int socketID, struct sockaddr_in * addr){
 // marks an RCS socket (the argument) as listening for connection requests. Returns 0 on success.
 int rcsListen(int socketID) {
     try {
-        return rcsMap.get(socketID).listen(addr);
+        return rcsMap.get(socketID).listen();
     } catch (RcsMap::NotFound n) {
         return -1;
     }
@@ -45,9 +45,9 @@ int rcsListen(int socketID) {
 // connection requests. The call is unblocked when a connection request is received. The address of the
 // peer (client) is filled into the second argument. The call returns a descriptor to a new RCS socket
 // that can be used to rcsSend () and rcsRecv () with the peer (client).
-int rcsAccept(int socketID, struct sockaddr_in * addr) {
+int rcsAccept(int socketID, sockaddr_in * addr) {
     try {
-        return rcsMap.get(socketID).accept(addr);
+        return rcsMap.get(socketID).accept(addr, rcsMap);
     } catch (RcsMap::NotFound n) {
         return -1;
     }
@@ -55,7 +55,7 @@ int rcsAccept(int socketID, struct sockaddr_in * addr) {
 
 // connects a client to a server. The socket (first argument) must have been bound beforehand using rcsBind().
 // The second argument identifies the server to which connection should be attempted. Returns 0 on success.
-int rcsConnect(int socketID, const struct sockaddr_in * addr) {
+int rcsConnect(int socketID, const sockaddr_in * addr) {
     try {
         return rcsMap.get(socketID).connect(addr);
     } catch (RcsMap::NotFound n) {

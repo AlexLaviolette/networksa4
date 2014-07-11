@@ -1,6 +1,7 @@
 #include <map>
 #include <queue>
 #include <string.h>
+#include <algorithm>
 #include "rcsmap.h"
 #include "mybind.cpp"
 #include "ucp.cpp"
@@ -68,7 +69,7 @@ int RcsConn::accept(sockaddr_in * addr, RcsMap & map) {
     set_flags(request, SYN_BIT | ACK_BIT);
     set_checksum(request);
 
-    unsigned int conn_sock = newConn.second.getSocketId();
+    unsigned int conn_sock = newConn.second.getSocketID();
     ucpSetSockRecvTimeout(conn_sock, CONNECT_TIMEOUT);
 
     while (1) {
@@ -129,7 +130,7 @@ int RcsConn::recv(void * buf, int maxBytes) {
         if (is_corrupt(request) || get_seq_num(request) != seq_num) {
             char response[HEADER_LEN] = {0};
             set_flags(response, ACK_BIT);
-            set_seqnum(response, seq_num);
+            set_seq_num(response, seq_num);
             set_checksum(response);
             ucpSendTo(ucp_sock, response, HEADER_LEN, &addr);
             continue;
@@ -137,11 +138,11 @@ int RcsConn::recv(void * buf, int maxBytes) {
         break;
     }
 
-    memcpy(buf, response + HEADER_LEN, amount_recvd - HEADER_LEN);
+    memcpy(buf, request + HEADER_LEN, amount_recvd - HEADER_LEN);
 
     char response[HEADER_LEN] = {0};
     set_flags(response, ACK_BIT);
-    set_seqnum(response, seq_num);
+    set_seq_num(response, seq_num);
     set_checksum(response);
     ucpSendTo(ucp_sock, response, HEADER_LEN, &addr);
 
@@ -157,7 +158,7 @@ int RcsConn::send(const void * buf, int numBytes) {
     const char * charBuf = (const char *) buf;
     unsigned int packet_seq_num = 1;
     for (const char * chunk = charBuf; chunk += MAX_DATA_SIZE; chunk - charBuf < numBytes) {
-        unsigned int dataSize = min(MAX_DATA_SIZE, chunk - charBuf);
+        unsigned int dataSize = std::min(MAX_DATA_SIZE, chunk - charBuf);
         char * packet = new char[dataSize + HEADER_LEN];
         if (!packet) {
             while (!queue.empty()) {
@@ -170,7 +171,7 @@ int RcsConn::send(const void * buf, int numBytes) {
         memcpy(packet + HEADER_LEN, chunk, dataSize);
         memset(packet, 0, HEADER_LEN);
 
-        set_seqnum(packet, packet_seq_num);
+        set_seq_num(packet, packet_seq_num);
         set_length(packet, dataSize);
         set_checksum(packet);
 
@@ -180,7 +181,7 @@ int RcsConn::send(const void * buf, int numBytes) {
 
     while (!queue.empty()) {
 
-        ucpSendTo(ucp_sock, queue.front(), get_length(packet) + HEADER_LEN, &destination);
+        ucpSendTo(ucp_sock, queue.front(), get_length(queue.front()) + HEADER_LEN, &destination);
         char response[HEADER_LEN] = {0};
 
         ucpRecvFrom(ucp_sock, response, HEADER_LEN, &destination);
