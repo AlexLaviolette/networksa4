@@ -6,6 +6,10 @@
 
 #define CONNECT_TIMEOUT 1000
 #define HEADER_LEN 7
+#define FLAGS 0
+#define SEQ_NUM 1
+#define LENGTH 3
+#define CHECKSUM 5
 #define SYN_BIT 0x4
 #define ACK_BIT 0x2
 #define FIN_BIT 0x1
@@ -191,6 +195,60 @@ int RcsConn::send(const void * buf, int numBytes) {
 int RcsConn::close() {
     return ucpClose(ucp_sock);
 }
+
+
+bool RcsConn::is_corrupt(const char * packet) {
+    unsigned short checksum = packet[CHECKSUM];
+    checksum = ((checksum << 8) | packet[CHECKSUM+1]);
+    return checksum == calculate_checksum(packet);
+}
+
+void RcsConn::set_checksum(char * packet) {
+    unsigned short checksum = calculate_checksum(packet);
+    memcpy(packet + CHECKSUM, &checksum, 2);
+}
+
+unsigned short RcsConn::calculate_checksum(const char * packet) {
+    unsigned short length = get_length(packet);   
+    unsigned short checksum = 0;
+    for (const char * it = packet; it - packet < length; it += 2) {
+        unsigned short word = *it;
+        if (it - packet + 1 < length) {
+            word = ((word << 8) | *(it + 1));
+        }
+        checksum ^= word;
+    }
+    return checksum;
+}
+
+unsigned char RcsConn::get_flags(const char * packet) {
+    return packet[FLAGS];
+}
+
+void RcsConn::set_flags(char * packet, unsigned char flags) {
+    packet[FLAGS] = flags;
+}
+
+unsigned short RcsConn::get_length(const char * packet) {
+    unsigned short length = ((packet[LENGTH] << 8) | packet[LENGTH + 1]);
+    return length;
+}
+
+void RcsConn::set_length(char * packet, unsigned short length) {
+    packet[LENGTH] = (length & 0xff00) >> 8;
+    packet[LENGTH + 1] = (length & 0xff);
+}
+
+unsigned short RcsConn::get_seq_num(const char * packet) {
+    unsigned short seq_num = ((packet[SEQ_NUM] << 8) | packet[SEQ_NUM + 1]);
+    return seq_num;
+}
+
+void RcsConn::set_seq_num(char * packet, unsigned short seq_num) {
+    packet[SEQ_NUM] = (seq_num & 0xff00) >> 8;
+    packet[SEQ_NUM + 1] = (seq_num & 0xff);
+}
+
 
 
 RcsMap::RcsMap(): nextId(0) {}

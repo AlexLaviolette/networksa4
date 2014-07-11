@@ -20,6 +20,17 @@ class RcsConn {
         int send(const void * buf, int numBytes);
         int close();
         int getSocketID();
+
+    private:
+        bool is_corrupt(const char * packet);
+        unsigned char get_flags(const char * packet);
+        unsigned short get_length(const char * packet);
+        unsigned short get_seq_num(const char * packet);
+        unsigned short calculate_checksum(const char * packet);
+        void set_flags(char * packet, unsigned char flags);
+        void set_length(char * packet, unsigned short length);
+        void set_seq_num(char * packet, unsigned short seq_num);
+        void set_checksum(char * packet);
 };
 
 class RcsMap {
