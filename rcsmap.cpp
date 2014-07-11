@@ -10,7 +10,7 @@
 #define ACK_BIT 0x2
 #define FIN_BIT 0x1
 
-RcsConn::RcsConn(): ucp_sock(ucpSocket()) {}
+RcsConn::RcsConn(): ucp_sock(ucpSocket()), seq_num(0) {}
 
 RcsConn::~RcsConn() {}
 

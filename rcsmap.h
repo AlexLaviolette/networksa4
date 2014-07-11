@@ -6,6 +6,7 @@ class RcsConn {
     unsigned int ucp_sock;
     sockaddr_in destination;
     std::queue<char *> queue;
+    unsigned int seq_num;
 
     public:
         RcsConn();
