@@ -1,6 +1,7 @@
 #include <map>
 #include <queue>
 #include <string.h>
+#include <limits.h>
 #include <algorithm>
 #include "rcsmap.h"
 #include "mybind.cpp"
