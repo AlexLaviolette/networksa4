@@ -16,7 +16,7 @@ int rcsSocket() {
 // binds an RCS socket (first argument) to the address structure (second argument). Returns 0 on success.
 int rcsBind(int socketID, const struct sockaddr_in * addr) {
     try {
-        return rcsMap.get(socketId).bind(addr);
+        return rcsMap.get(socketID).bind(addr);
     } catch (RcsMap::NotFound n) {
         return -1;
     }
@@ -26,7 +26,7 @@ int rcsBind(int socketID, const struct sockaddr_in * addr) {
 // has been bound via a call to rcsBind(). Returns 0 on success.
 int rcsGetSockName(int socketID, struct sockaddr_in * addr){
     try {
-        return rcsMap.get(socketId).getSockName(addr);
+        return rcsMap.get(socketID).getSockName(addr);
     } catch (RcsMap::NotFound n) {
         return -1;
     }
@@ -35,7 +35,7 @@ int rcsGetSockName(int socketID, struct sockaddr_in * addr){
 // marks an RCS socket (the argument) as listening for connection requests. Returns 0 on success.
 int rcsListen(int socketID) {
     try {
-        return rcsMap.get(socketId).listen(addr);
+        return rcsMap.get(socketID).listen(addr);
     } catch (RcsMap::NotFound n) {
         return -1;
     }
@@ -47,7 +47,7 @@ int rcsListen(int socketID) {
 // that can be used to rcsSend () and rcsRecv () with the peer (client).
 int rcsAccept(int socketID, struct sockaddr_in * addr) {
     try {
-        return rcsMap.get(socketId).accept(addr);
+        return rcsMap.get(socketID).accept(addr);
     } catch (RcsMap::NotFound n) {
         return -1;
     }
@@ -57,7 +57,7 @@ int rcsAccept(int socketID, struct sockaddr_in * addr) {
 // The second argument identifies the server to which connection should be attempted. Returns 0 on success.
 int rcsConnect(int socketID, const struct sockaddr_in * addr) {
     try {
-        return rcsMap.get(socketId).connect(addr);
+        return rcsMap.get(socketID).connect(addr);
     } catch (RcsMap::NotFound n) {
         return -1;
     }
@@ -70,7 +70,7 @@ int rcsConnect(int socketID, const struct sockaddr_in * addr) {
 // sent and received reliably, so any byte that is returned by this call should be what was sent, and in the correct order.
 int rcsRecv(int socketID, void * rcvBuffer, int maxBytes) {
     try {
-        return rcsMap.get(socketId).recv(rcvBuffer, maxBytes);
+        return rcsMap.get(socketID).recv(rcvBuffer, maxBytes);
     } catch (RcsMap::NotFound n) {
         return -1;
     }
@@ -82,7 +82,7 @@ int rcsRecv(int socketID, void * rcvBuffer, int maxBytes) {
 // a non-negative return value, then we know that so many bytes were reliably received by the other end.
 int rcsSend(int socketID, const void * sendBuffer, int numBytes) {
     try {
-        return rcsMap.get(socketId).send(sendBuffer, numBytes);
+        return rcsMap.get(socketID).send(sendBuffer, numBytes);
     } catch (RcsMap::NotFound n) {
         return -1;
     }
@@ -90,5 +90,5 @@ int rcsSend(int socketID, const void * sendBuffer, int numBytes) {
 
 // closes an RCS socket descriptor. Returns 0 on success.
 int rcsClose(int socketID) {
-	return rcsMap.close(socketId);
+	return rcsMap.close(socketID);
 }

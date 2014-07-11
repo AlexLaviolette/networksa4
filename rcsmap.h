@@ -1,6 +1,7 @@
 #include <map>
 #include <queue>
 #include <utility>
+#include <netinet/in.h>
 
 class RcsConn {
     unsigned int ucp_sock;
@@ -38,7 +39,7 @@ class RcsMap {
     unsigned int nextId;
 
     public:
-        class NotFound: public Exception {};
+        class NotFound: public std::exception {};
         RcsMap();
         ~RcsMap();
         RcsConn & get(unsigned int sockId);

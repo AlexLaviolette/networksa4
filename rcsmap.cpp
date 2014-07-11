@@ -3,6 +3,8 @@
 #include <string.h>
 #include "rcsmap.h"
 #include "mybind.cpp"
+#include "ucp.cpp"
+
 
 #define CONNECT_TIMEOUT 1000
 #define HEADER_LEN 7
@@ -209,7 +211,7 @@ void RcsConn::set_checksum(char * packet) {
 }
 
 unsigned short RcsConn::calculate_checksum(const char * packet) {
-    unsigned short length = get_length(packet);   
+    unsigned short length = get_length(packet);
     unsigned short checksum = 0;
     for (const char * it = packet; it - packet < length; it += 2) {
         unsigned short word = *it;
