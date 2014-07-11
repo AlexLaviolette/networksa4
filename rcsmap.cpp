@@ -63,6 +63,8 @@ int RcsConn::accept(sockaddr_in * addr, RcsMap & map) {
     set_checksum(request);
 
     unsigned int conn_sock = newConn.second.getSocketId();
+    ucpSetSockRecvTimeout(conn_sock, CONNECT_TIMEOUT);
+
     while (1) {
         ucpSendTo(conn_sock, request, HEADER_LEN, addr);
         ucpRecvFrom(conn_sock, response, HEADER_LEN, addr);
