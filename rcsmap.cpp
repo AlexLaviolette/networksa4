@@ -157,8 +157,8 @@ int RcsConn::send(const void * buf, int numBytes) {
 
     const char * charBuf = (const char *) buf;
     unsigned int packet_seq_num = 1;
-    for (const char * chunk = charBuf; chunk += MAX_DATA_SIZE; chunk - charBuf < numBytes) {
-        unsigned int dataSize = std::min(MAX_DATA_SIZE, chunk - charBuf);
+    for (const char * chunk = charBuf; chunk - charBuf < numBytes; chunk += MAX_DATA_SIZE) {
+        unsigned int dataSize = std::min(MAX_DATA_SIZE, (int) (chunk - charBuf));
         char * packet = new char[dataSize + HEADER_LEN];
         if (!packet) {
             while (!queue.empty()) {
@@ -187,7 +187,7 @@ int RcsConn::send(const void * buf, int numBytes) {
         ucpRecvFrom(ucp_sock, response, HEADER_LEN, &destination);
         if (errno & (EAGAIN | EWOULDBLOCK)) continue;
         if (is_corrupt(response)) continue;
-        if (get_seq_num(response) != get_seq_num(packet)) continue;
+        if (get_seq_num(response) != get_seq_num(queue.front())) continue;
         delete queue.front();
         queue.pop();
     }
@@ -263,11 +263,11 @@ RcsConn & RcsMap::get(unsigned int sockId) {
     if (it == map.end()) {
         throw NotFound();
     }
-    return it.second;
+    return it->second;
 }
 
 std::pair<unsigned int, RcsConn &> RcsMap::newConn() {
-    return std::pair(nextId, map[nextId++]);
+    return std::pair<unsigned int, RcsConn &>(nextId, map[nextId++]);
 }
 
 int RcsMap::close(unsigned int sockId) {
@@ -275,7 +275,7 @@ int RcsMap::close(unsigned int sockId) {
     if (it == map.end()) {
         return -1;
     }
-    int ret = it.second.close();
+    int ret = it->second.close();
     map.erase(it);
     return ret;
 }
