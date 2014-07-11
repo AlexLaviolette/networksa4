@@ -144,6 +144,8 @@ int RcsConn::recv(void * buf, int maxBytes) {
 }
 
 int RcsConn::send(const void * buf, int numBytes) {
+    ucpSetSockRecvTimeout(ucp_sock, CONNECT_TIMEOUT);
+
     const char * charBuf = (const char *) buf;
     unsigned int packet_seq_num = 1;
     for (const char * chunk = charBuf; chunk += MAX_DATA_SIZE; chunk - charBuf < numBytes) {
@@ -167,6 +169,21 @@ int RcsConn::send(const void * buf, int numBytes) {
         packet_seq_num++;
         queue.push(packet);
     }
+
+    while (!queue.empty()) {
+
+        ucpSendTo(ucp_sock, queue.front(), get_length(packet) + HEADER_LEN, &destination);
+        char response[HEADER_LEN] = {0};
+
+        ucpRecvFrom(ucp_sock, response, HEADER_LEN, &destination);
+        if (errno & (EAGAIN | EWOULDBLOCK)) continue;
+        if (is_corrupt(response)) continue;
+        if (get_seq_num(response) != get_seq_num(packet)) continue;
+        delete queue.front();
+        queue.pop();
+    }
+
+    return numBytes;
 }
 
 int RcsConn::close() {
