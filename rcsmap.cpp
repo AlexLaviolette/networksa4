@@ -5,7 +5,7 @@
 #include "mybind.cpp"
 
 #define CONNECT_TIMEOUT 1000
-#define HEADER_LEN 5
+#define HEADER_LEN 7
 #define SYN_BIT 0x4
 #define ACK_BIT 0x2
 #define FIN_BIT 0x1
@@ -40,19 +40,38 @@ int RcsConn::accept(sockaddr_in * addr, RcsMap & map) {
         ucpRecvFrom(ucp_sock, request, HEADER_LEN, addr);
         if (errno & (EAGAIN | EWOULDBLOCK)) continue;
         if (is_corrupt(request)) continue;
+        if (get_seq_num(request) != 0) continue;
         if ((get_flags(request) & (SYN_BIT|ACK_BIT)) != SYN_BIT) continue;
         break;
     }
 
     std::pair<unsigned int, RcsConn &> newConn = map.newConn();
     newConn.second.destination = *addr;
-    // Next, figure out what to bind this connection to
-    // then send the response through the new socket
-    // and wait for an ACK
-    if (!newConn.second.bind(addr)) {
+
+    sockaddr_in local_addr;
+    getSockName(&local_addr);
+    local_addr.sin_port = 0;
+
+    if (!newConn.second.bind(&local_addr)) {
         map.close(newConn.first);
         return -1;
     }
+
+    set_flags(request, SYN_BIT | ACK_BIT);
+    set_checksum(request);
+    
+    unsigned int conn_sock = newConn.second.getSocketId();
+    while (1) {
+        ucpSendTo(conn_sock, request, HEADER_LEN, addr);
+        ucpRecvFrom(conn_sock, response, HEADER_LEN, addr);
+        if (errno & (EAGAIN | EWOULDBLOCK)) continue;
+        if (is_corrupt(response)) continue;
+        if (get_seq_num(request) != 0) continue;
+        if ((get_flags(response) & (SYN_BIT|ACK_BIT)) != ACK_BIT) continue;
+        break;
+    }
+
+    return newConn.first;
 }
 
 int RcsConn::connect(const sockaddr_in * addr) {
@@ -73,6 +92,7 @@ int RcsConn::connect(const sockaddr_in * addr) {
         ucpRecvFrom(ucp_sock, response, HEADER_LEN, &destination);
         if (errno & (EAGAIN | EWOULDBLOCK)) continue;
         if (is_corrupt(response)) continue;
+        if (get_seq_num(request) != 0) continue;
         if ((get_flags(response) & (SYN_BIT|ACK_BIT)) != (SYN_BIT|ACK_BIT)) continue;
         break;
     }
