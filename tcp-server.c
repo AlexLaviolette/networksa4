@@ -108,7 +108,7 @@ uint32_t getPublicIPAddr() {
 }
 
 int main(int argc, char *argv[]) {
-    int s = rcsSocket(AF_INET, SOCK_STREAM, 0);
+    int s = rcsSocket();
     struct sockaddr_in a;
 
     memset(&a, 0, sizeof(struct sockaddr_in));

@@ -1,5 +1,6 @@
 #include "rcsmap.h"
 #include "rcs.h"
+#include <iostream>
 
 using namespace std;
 

@@ -39,7 +39,7 @@ int main(int argc, char *argv[]) {
 	printf("usage: %s <server-ip> <server-port>\n", argv[0]);
 	exit(0);
     }
-    int s = rcsSocket(AF_INET, SOCK_STREAM, 0);
+    int s = rcsSocket();
     struct sockaddr_in a;
 
     memset(&a, 0, sizeof(struct sockaddr_in));

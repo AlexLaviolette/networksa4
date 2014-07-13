@@ -1,3 +1,4 @@
+#include <iostream>
 #include <map>
 #include <queue>
 #include <string.h>
@@ -277,7 +278,9 @@ RcsConn & RcsMap::get(unsigned int sockId) {
 }
 
 std::pair<unsigned int, RcsConn &> RcsMap::newConn() {
-    return std::pair<unsigned int, RcsConn &>(nextId, map[nextId++]);
+    std::pair<unsigned int, RcsConn &> ret(nextId, map[nextId]);
+    nextId++;
+    return ret;
 }
 
 int RcsMap::close(unsigned int sockId) {
