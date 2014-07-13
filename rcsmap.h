@@ -1,3 +1,6 @@
+#ifndef RCSMAP_H
+#define RCSMAP_H
+
 #include <map>
 #include <queue>
 #include <utility>
@@ -13,6 +16,7 @@ class RcsConn {
 
     public:
         RcsConn();
+        RcsConn(const RcsConn & conn);
         ~RcsConn();
         int bind(sockaddr_in * addr);
         int getSockName(sockaddr_in * addr);
@@ -26,11 +30,11 @@ class RcsConn {
 
     private:
         bool is_corrupt(const char * packet);
-        unsigned char get_flags(const char * packet);
+        unsigned short get_flags(const char * packet);
         unsigned short get_length(const char * packet);
         unsigned short get_seq_num(const char * packet);
         unsigned short calculate_checksum(const char * packet);
-        void set_flags(char * packet, unsigned char flags);
+        void set_flags(char * packet, unsigned short flags);
         void set_length(char * packet, unsigned short length);
         void set_seq_num(char * packet, unsigned short seq_num);
         void set_checksum(char * packet);
@@ -49,3 +53,4 @@ class RcsMap {
         int close(unsigned int sockId);
 };
 
+#endif
