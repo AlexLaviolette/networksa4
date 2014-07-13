@@ -71,7 +71,7 @@ int RcsConn::accept(sockaddr_in * addr, RcsMap & map) {
     getSockName(&local_addr);
     local_addr.sin_port = 0;
 
-    if (!newConn.second.bind(&local_addr)) {
+    if (newConn.second.bind(&local_addr) < 0) {
         map.close(newConn.first);
         return -1;
     }
@@ -87,9 +87,9 @@ int RcsConn::accept(sockaddr_in * addr, RcsMap & map) {
         errno = 0;
         int length = ucpRecvFrom(conn_sock, response, HEADER_LEN, addr);
         if (errno & (EAGAIN | EWOULDBLOCK)) continue;
-        if (get_length(request) != length - HEADER_LEN) continue;
+        if (get_length(response) != length - HEADER_LEN) continue;
         if (is_corrupt(response)) continue;
-        if (get_seq_num(request) != 0) continue;
+        if (get_seq_num(response) != 0) continue;
         if ((get_flags(response) & (SYN_BIT|ACK_BIT)) != ACK_BIT) continue;
         break;
     }
