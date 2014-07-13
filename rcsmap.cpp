@@ -222,7 +222,7 @@ int RcsConn::close() {
 bool RcsConn::is_corrupt(const unsigned char * packet) {
     unsigned short checksum;
     memcpy(&checksum, packet + CHECKSUM, 2);
-    return checksum == calculate_checksum(packet);
+    return checksum != calculate_checksum(packet);
 }
 
 void RcsConn::set_checksum(unsigned char * packet) {
