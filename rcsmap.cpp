@@ -50,10 +50,11 @@ int RcsConn::listen() {
 int RcsConn::accept(sockaddr_in * addr, RcsMap & map) {
     ucpSetSockRecvTimeout(ucp_sock, CONNECT_TIMEOUT);
 
-    char request[HEADER_LEN] = {0};
-    char response[HEADER_LEN] = {0};
+    unsigned char request[HEADER_LEN] = {0};
+    unsigned char response[HEADER_LEN] = {0};
 
     while (1) {
+        errno = 0;
         int length = ucpRecvFrom(ucp_sock, request, HEADER_LEN, addr);
         if (errno & (EAGAIN | EWOULDBLOCK)) continue;
         if (get_length(request) != length - HEADER_LEN) continue;
@@ -83,6 +84,7 @@ int RcsConn::accept(sockaddr_in * addr, RcsMap & map) {
 
     while (1) {
         ucpSendTo(conn_sock, request, HEADER_LEN, addr);
+        errno = 0;
         int length = ucpRecvFrom(conn_sock, response, HEADER_LEN, addr);
         if (errno & (EAGAIN | EWOULDBLOCK)) continue;
         if (get_length(request) != length - HEADER_LEN) continue;
@@ -104,13 +106,14 @@ int RcsConn::connect(const sockaddr_in * addr) {
 
     ucpSetSockRecvTimeout(ucp_sock, CONNECT_TIMEOUT);
 
-    char request[HEADER_LEN] = {0};
-    char response[HEADER_LEN] = {0};
+    unsigned char request[HEADER_LEN] = {0};
+    unsigned char response[HEADER_LEN] = {0};
     set_flags(request, SYN_BIT);
     set_checksum(request);
 
     while (1) {
         ucpSendTo(ucp_sock, request, HEADER_LEN, &destination);
+        errno = 0;
         int length = ucpRecvFrom(ucp_sock, response, HEADER_LEN, &destination);
         if (errno & (EAGAIN | EWOULDBLOCK)) continue;
         if (get_length(request) != length - HEADER_LEN) continue;
@@ -125,6 +128,7 @@ int RcsConn::connect(const sockaddr_in * addr) {
     ucpSendTo(ucp_sock, response, HEADER_LEN, &destination);
 
     seq_num++;
+    std::cerr << "asdf" << std::endl;
     return 0;
 }
 
@@ -134,14 +138,15 @@ int RcsConn::recv(void * buf, int maxBytes) {
     sockaddr_in addr;
     int amount_recvd = 0;
 
-    char* request = new char[maxBytes + HEADER_LEN];
+    unsigned char* request = new unsigned char[maxBytes + HEADER_LEN];
     if (!request) return -1;
 
     while(1) {
+        errno = 0;
         amount_recvd = ucpRecvFrom(ucp_sock, request, maxBytes + HEADER_LEN, &addr);
         if (errno & (EAGAIN | EWOULDBLOCK)) continue;
         if (get_length(request) != amount_recvd - HEADER_LEN || is_corrupt(request) || get_seq_num(request) != seq_num) {
-            char response[HEADER_LEN] = {0};
+            unsigned char response[HEADER_LEN] = {0};
             set_flags(response, ACK_BIT);
             set_seq_num(response, seq_num);
             set_checksum(response);
@@ -153,7 +158,7 @@ int RcsConn::recv(void * buf, int maxBytes) {
 
     memcpy(buf, request + HEADER_LEN, amount_recvd - HEADER_LEN);
 
-    char response[HEADER_LEN] = {0};
+    unsigned char response[HEADER_LEN] = {0};
     set_flags(response, ACK_BIT);
     set_seq_num(response, seq_num);
     set_checksum(response);
@@ -168,11 +173,11 @@ int RcsConn::recv(void * buf, int maxBytes) {
 int RcsConn::send(const void * buf, int numBytes) {
     ucpSetSockRecvTimeout(ucp_sock, CONNECT_TIMEOUT);
 
-    const char * charBuf = (const char *) buf;
+    const unsigned char * charBuf = (const unsigned char *) buf;
     unsigned int packet_seq_num = 1;
-    for (const char * chunk = charBuf; chunk - charBuf < numBytes; chunk += MAX_DATA_SIZE) {
+    for (const unsigned char * chunk = charBuf; chunk - charBuf < numBytes; chunk += MAX_DATA_SIZE) {
         unsigned int dataSize = std::min(MAX_DATA_SIZE, (int) (chunk - charBuf));
-        char * packet = new char[dataSize + HEADER_LEN];
+        unsigned char * packet = new unsigned char[dataSize + HEADER_LEN];
         if (!packet) {
             while (!queue.empty()) {
                 delete queue.front();
@@ -195,8 +200,9 @@ int RcsConn::send(const void * buf, int numBytes) {
     while (!queue.empty()) {
 
         ucpSendTo(ucp_sock, queue.front(), get_length(queue.front()) + HEADER_LEN, &destination);
-        char response[HEADER_LEN] = {0};
+        unsigned char response[HEADER_LEN] = {0};
 
+        errno = 0;
         int length = ucpRecvFrom(ucp_sock, response, HEADER_LEN, &destination);
         if (errno & (EAGAIN | EWOULDBLOCK)) continue;
         if (get_length(response) != length - HEADER_LEN) continue;
@@ -214,52 +220,55 @@ int RcsConn::close() {
 }
 
 
-bool RcsConn::is_corrupt(const char * packet) {
-    unsigned short checksum = packet[CHECKSUM];
-    checksum = ((checksum << 8) | packet[CHECKSUM+1]);
+bool RcsConn::is_corrupt(const unsigned char * packet) {
+    unsigned short checksum;
+    memcpy(&checksum, packet + CHECKSUM, 2);
     return checksum == calculate_checksum(packet);
 }
 
-void RcsConn::set_checksum(char * packet) {
+void RcsConn::set_checksum(unsigned char * packet) {
     unsigned short checksum = calculate_checksum(packet);
     memcpy(packet + CHECKSUM, &checksum, 2);
 }
 
-unsigned short RcsConn::calculate_checksum(const char * packet) {
-    unsigned short length = get_length(packet);
+unsigned short RcsConn::calculate_checksum(const unsigned char * packet) {
+    unsigned short length = get_length(packet) + HEADER_LEN;
     unsigned short checksum = 0;
-    for (const char * it = packet; it - packet < length; it += 2) {
-        if (it - packet == CHECKSUM) continue;
-        unsigned short word = ((*it << 8) | *(it + 1));
+    for (const unsigned char * it = packet; it - packet < length; it += 2) {
+        unsigned short word;
+        memcpy(&word, it, 2);
         checksum ^= word;
     }
     return checksum;
 }
 
-unsigned short RcsConn::get_flags(const char * packet) {
-    unsigned short flags = ((packet[FLAGS] << 8) | packet[FLAGS + 1]);
+unsigned short RcsConn::get_flags(const unsigned char * packet) {
+    unsigned short flags;
+    memcpy(&flags, packet + FLAGS, 2)
     return flags;
 }
 
-void RcsConn::set_flags(char * packet, unsigned short flags) {
+void RcsConn::set_flags(unsigned char * packet, unsigned short flags) {
     memcpy(packet + FLAGS, &flags, 2);
 }
 
-unsigned short RcsConn::get_length(const char * packet) {
-    unsigned short length = ((packet[LENGTH] << 8) | packet[LENGTH + 1]);
+unsigned short RcsConn::get_length(const unsigned char * packet) {
+    unsigned short length;
+    memcpy(&length, packet + LENGTH, 2)
     return length;
 }
 
-void RcsConn::set_length(char * packet, unsigned short length) {
+void RcsConn::set_length(unsigned char * packet, unsigned short length) {
     memcpy(packet + LENGTH, &length, 2);
 }
 
-unsigned short RcsConn::get_seq_num(const char * packet) {
-    unsigned short seq_num = ((packet[SEQ_NUM] << 8) | packet[SEQ_NUM + 1]);
+unsigned short RcsConn::get_seq_num(const unsigned char * packet) {
+    unsigned short seq_num;
+    memcpy(&seq_num, packet + SEQ_NUM, 2);
     return seq_num;
 }
 
-void RcsConn::set_seq_num(char * packet, unsigned short seq_num) {
+void RcsConn::set_seq_num(unsigned char * packet, unsigned short seq_num) {
     memcpy(packet + SEQ_NUM, &seq_num, 2);
 }
 

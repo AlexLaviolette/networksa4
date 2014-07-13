@@ -11,7 +11,7 @@ class RcsMap;
 class RcsConn {
     unsigned int ucp_sock;
     sockaddr_in destination;
-    std::queue<char *> queue;
+    std::queue<unsigned char *> queue;
     unsigned int seq_num;
 
     public:
@@ -29,15 +29,15 @@ class RcsConn {
         int getSocketID();
 
     private:
-        bool is_corrupt(const char * packet);
-        unsigned short get_flags(const char * packet);
-        unsigned short get_length(const char * packet);
-        unsigned short get_seq_num(const char * packet);
-        unsigned short calculate_checksum(const char * packet);
-        void set_flags(char * packet, unsigned short flags);
-        void set_length(char * packet, unsigned short length);
-        void set_seq_num(char * packet, unsigned short seq_num);
-        void set_checksum(char * packet);
+        bool is_corrupt(const unsigned char * packet);
+        unsigned short get_flags(const unsigned char * packet);
+        unsigned short get_length(const unsigned char * packet);
+        unsigned short get_seq_num(const unsigned char * packet);
+        unsigned short calculate_checksum(const unsigned char * packet);
+        void set_flags(unsigned char * packet, unsigned short flags);
+        void set_length(unsigned char * packet, unsigned short length);
+        void set_seq_num(unsigned char * packet, unsigned short seq_num);
+        void set_checksum(unsigned char * packet);
 };
 
 class RcsMap {
