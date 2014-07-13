@@ -128,7 +128,6 @@ int RcsConn::connect(const sockaddr_in * addr) {
     ucpSendTo(ucp_sock, response, HEADER_LEN, &destination);
 
     seq_num++;
-    std::cerr << "asdf" << std::endl;
     return 0;
 }
 
@@ -235,6 +234,7 @@ unsigned short RcsConn::calculate_checksum(const unsigned char * packet) {
     unsigned short length = get_length(packet) + HEADER_LEN;
     unsigned short checksum = 0;
     for (const unsigned char * it = packet; it - packet < length; it += 2) {
+        if (it - packet == CHECKSUM) continue;
         unsigned short word;
         memcpy(&word, it, 2);
         checksum ^= word;
@@ -244,7 +244,7 @@ unsigned short RcsConn::calculate_checksum(const unsigned char * packet) {
 
 unsigned short RcsConn::get_flags(const unsigned char * packet) {
     unsigned short flags;
-    memcpy(&flags, packet + FLAGS, 2)
+    memcpy(&flags, packet + FLAGS, 2);
     return flags;
 }
 
@@ -254,7 +254,7 @@ void RcsConn::set_flags(unsigned char * packet, unsigned short flags) {
 
 unsigned short RcsConn::get_length(const unsigned char * packet) {
     unsigned short length;
-    memcpy(&length, packet + LENGTH, 2)
+    memcpy(&length, packet + LENGTH, 2);
     return length;
 }
 
