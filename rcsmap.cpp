@@ -9,7 +9,7 @@
 #include "ucp.cpp"
 
 
-#define CONNECT_TIMEOUT 1000
+#define CONNECT_TIMEOUT 400
 #define HEADER_LEN 8
 #define FLAGS 0
 #define SEQ_NUM 2
@@ -158,6 +158,7 @@ int RcsConn::recv(void * buf, int maxBytes) {
         break;
     }
 
+    seq_num++;
     memcpy(buf, request + HEADER_LEN, amount_recvd - HEADER_LEN);
 
     unsigned char response[HEADER_LEN] = {0};
@@ -166,15 +167,14 @@ int RcsConn::recv(void * buf, int maxBytes) {
     set_checksum(response);
     ucpSendTo(ucp_sock, response, HEADER_LEN, &addr);
 
-    seq_num++;
-    return amount_recvd;
+    return amount_recvd - HEADER_LEN;
 }
 
 int RcsConn::send(const void * buf, int numBytes) {
     ucpSetSockRecvTimeout(ucp_sock, CONNECT_TIMEOUT);
 
     const unsigned char * charBuf = (const unsigned char *) buf;
-    unsigned int packet_seq_num = 1;
+    unsigned int packet_seq_num = seq_num;
     for (const unsigned char * chunk = charBuf; chunk - charBuf < numBytes; chunk += MAX_DATA_SIZE) {
         unsigned int dataSize = std::min(MAX_DATA_SIZE, (int) (numBytes - (chunk - charBuf)));
         unsigned char * packet = new unsigned char[dataSize + HEADER_LEN];
@@ -214,7 +214,8 @@ int RcsConn::send(const void * buf, int numBytes) {
             ucpSendTo(ucp_sock, response, HEADER_LEN, &destination);
             continue;
         }
-        if (get_seq_num(response) != get_seq_num(queue.front())) continue;
+        if (get_seq_num(response) <= get_seq_num(queue.front())) continue;
+		seq_num++;
         delete queue.front();
         queue.pop();
     }
@@ -282,7 +283,7 @@ void RcsConn::set_seq_num(unsigned char * packet, unsigned short seq_num) {
 
 
 
-RcsMap::RcsMap(): nextId(0) {}
+RcsMap::RcsMap(): nextId(1) {}
 
 RcsMap::~RcsMap() {}
 
