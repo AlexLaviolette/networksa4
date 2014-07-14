@@ -8,10 +8,10 @@
 #include "mybind.cpp"
 #include "ucp.cpp"
 
-#define CONNECT_TIMEOUT 1000
-#define ACCEPT_TIMEOUT 400
-#define SEND_TIMEOUT 1000
-#define RECV_TIMEOUT 400
+#define CONNECT_TIMEOUT 2000
+#define ACCEPT_TIMEOUT 1000
+#define SEND_TIMEOUT 2000
+#define RECV_TIMEOUT 1000
 #define SYN_ACK_TIMEOUT 5000
 
 #define HEADER_LEN 8
@@ -259,8 +259,8 @@ unsigned short RcsConn::calculate_checksum(const unsigned char * packet) {
     unsigned short checksum = 0;
     for (const unsigned char * it = packet; it - packet < length; it += 2) {
         if (it - packet == CHECKSUM) continue;
-        unsigned short word;
-        memcpy(&word, it, 2);
+        unsigned short word = 0;
+        memcpy(&word, it, std::min(2, (int) (length - (it - packet))));
         checksum ^= word;
     }
     return checksum;
