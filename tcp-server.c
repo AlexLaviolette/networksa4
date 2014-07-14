@@ -63,7 +63,7 @@ void *serviceConnection(void *arg) {
 #if 0
 	if(write(STDOUT_FILENO, buf, recvlen) < recvlen) {
 #endif
-	if(rcsSend(wfd, buf, recvlen) < recvlen) {
+	if(write(wfd, buf, recvlen) < recvlen) {
 	    perror("write() in thread wrote too few");
 	    close(wfd);
 	    return NULL;

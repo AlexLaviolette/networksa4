@@ -84,6 +84,7 @@ int RcsConn::accept(sockaddr_in * addr, RcsMap & map) {
 
     while (1) {
         ucpSendTo(conn_sock, request, HEADER_LEN, addr);
+
         errno = 0;
         int length = ucpRecvFrom(conn_sock, response, HEADER_LEN, addr);
         if (errno & (EAGAIN | EWOULDBLOCK)) continue;
@@ -94,7 +95,7 @@ int RcsConn::accept(sockaddr_in * addr, RcsMap & map) {
         break;
     }
 
-    seq_num++;
+    newConn.second.seq_num++;
     return newConn.first;
 }
 
@@ -113,6 +114,7 @@ int RcsConn::connect(const sockaddr_in * addr) {
 
     while (1) {
         ucpSendTo(ucp_sock, request, HEADER_LEN, &destination);
+
         errno = 0;
         int length = ucpRecvFrom(ucp_sock, response, HEADER_LEN, &destination);
         if (errno & (EAGAIN | EWOULDBLOCK)) continue;
@@ -144,7 +146,7 @@ int RcsConn::recv(void * buf, int maxBytes) {
         errno = 0;
         amount_recvd = ucpRecvFrom(ucp_sock, request, maxBytes + HEADER_LEN, &addr);
         if (errno & (EAGAIN | EWOULDBLOCK)) continue;
-        if (get_length(request) != amount_recvd - HEADER_LEN || is_corrupt(request) || get_seq_num(request) != seq_num) {
+        if (get_length(request) != amount_recvd - HEADER_LEN || is_corrupt(request) || get_seq_num(request) > seq_num) {
             unsigned char response[HEADER_LEN] = {0};
             set_flags(response, ACK_BIT);
             set_seq_num(response, seq_num);
@@ -152,6 +154,7 @@ int RcsConn::recv(void * buf, int maxBytes) {
             ucpSendTo(ucp_sock, response, HEADER_LEN, &addr);
             continue;
         }
+        if (get_seq_num(request) < seq_num) continue;
         break;
     }
 
@@ -165,8 +168,6 @@ int RcsConn::recv(void * buf, int maxBytes) {
 
     seq_num++;
     return amount_recvd;
-
-
 }
 
 int RcsConn::send(const void * buf, int numBytes) {
@@ -175,7 +176,7 @@ int RcsConn::send(const void * buf, int numBytes) {
     const unsigned char * charBuf = (const unsigned char *) buf;
     unsigned int packet_seq_num = 1;
     for (const unsigned char * chunk = charBuf; chunk - charBuf < numBytes; chunk += MAX_DATA_SIZE) {
-        unsigned int dataSize = std::min(MAX_DATA_SIZE, (int) (chunk - charBuf));
+        unsigned int dataSize = std::min(MAX_DATA_SIZE, (int) (numBytes - (chunk - charBuf)));
         unsigned char * packet = new unsigned char[dataSize + HEADER_LEN];
         if (!packet) {
             while (!queue.empty()) {
@@ -197,7 +198,6 @@ int RcsConn::send(const void * buf, int numBytes) {
     }
 
     while (!queue.empty()) {
-
         ucpSendTo(ucp_sock, queue.front(), get_length(queue.front()) + HEADER_LEN, &destination);
         unsigned char response[HEADER_LEN] = {0};
 
@@ -206,6 +206,14 @@ int RcsConn::send(const void * buf, int numBytes) {
         if (errno & (EAGAIN | EWOULDBLOCK)) continue;
         if (get_length(response) != length - HEADER_LEN) continue;
         if (is_corrupt(response)) continue;
+        if (get_flags(response) & SYN_BIT) {
+            set_flags(response, ACK_BIT);
+            set_seq_num(response, 0);
+            set_length(response, 0);
+            set_checksum(response);
+            ucpSendTo(ucp_sock, response, HEADER_LEN, &destination);
+            continue;
+        }
         if (get_seq_num(response) != get_seq_num(queue.front())) continue;
         delete queue.front();
         queue.pop();
