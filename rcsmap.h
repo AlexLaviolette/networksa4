@@ -2,7 +2,7 @@
 #define RCSMAP_H
 
 #include <map>
-#include <queue>
+#include <deque>
 #include <utility>
 #include <netinet/in.h>
 
@@ -11,7 +11,7 @@ class RcsMap;
 class RcsConn {
     unsigned int ucp_sock;
     sockaddr_in destination;
-    std::queue<unsigned char *> queue;
+    std::deque<unsigned char *> queue;
     unsigned int seq_num;
 
     public:

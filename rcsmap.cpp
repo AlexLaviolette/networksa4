@@ -1,13 +1,14 @@
 #include <iostream>
 #include <map>
-#include <queue>
 #include <errno.h>
+#include <deque>
 #include <string.h>
 #include <limits.h>
 #include <algorithm>
 #include "rcsmap.h"
 #include "mybind.h"
 #include "ucp.h"
+#include <stdexcept>
 
 #define CONNECT_TIMEOUT 2000
 #define ACCEPT_TIMEOUT 1000
@@ -183,6 +184,7 @@ int RcsConn::recv(void * buf, int maxBytes) {
 }
 
 int RcsConn::send(const void * buf, int numBytes) {
+    int N = 4;
     ucpSetSockRecvTimeout(ucp_sock, SEND_TIMEOUT);
 
     const unsigned char * charBuf = (const unsigned char *) buf;
@@ -193,7 +195,7 @@ int RcsConn::send(const void * buf, int numBytes) {
         if (!packet) {
             while (!queue.empty()) {
                 delete queue.front();
-                queue.pop();
+                queue.pop_front();
             }
             return -1;
         }
@@ -206,17 +208,33 @@ int RcsConn::send(const void * buf, int numBytes) {
         set_checksum(packet);
 
         packet_seq_num++;
-        queue.push(packet);
+        queue.push_back(packet);
     }
 
+    unsigned int next_seq_num = get_seq_num(queue.front());
     while (!queue.empty()) {
-        ucpSendTo(ucp_sock, queue.front(), get_length(queue.front()) + HEADER_LEN, &destination);
+
+        while (next_seq_num < seq_num + N ) {
+            try {
+                std::cerr << "Sending packet " << get_seq_num(queue.at(next_seq_num - seq_num)) << " expected " << next_seq_num << std::endl;
+                ucpSendTo(ucp_sock, queue.at(next_seq_num - seq_num), get_length(queue.at(next_seq_num - seq_num)) + HEADER_LEN, &destination);
+            } catch (const std::out_of_range& oor) {
+                std::cerr << "out of bounds biatch" << std::endl;
+                break;
+            }
+            next_seq_num++;
+        }
+
+
 
         unsigned char response[HEADER_LEN] = {0};
         while (1) {
             errno = 0;
             int length = ucpRecvFrom(ucp_sock, response, HEADER_LEN, &destination);
-            if (errno & (EAGAIN | EWOULDBLOCK)) break;
+            if (errno & (EAGAIN | EWOULDBLOCK)) {
+                next_seq_num = get_seq_num(queue.front());
+                break;
+            }
             std::cerr << "Got packet" << std::endl;
             if (get_length(response) != length - HEADER_LEN) break;
             if (is_corrupt(response)) break;
@@ -229,11 +247,13 @@ int RcsConn::send(const void * buf, int numBytes) {
                 ucpSendTo(ucp_sock, response, HEADER_LEN, &destination);
                 break;
             }
-            if (get_seq_num(response) <= get_seq_num(queue.front())) continue;
+            if (get_seq_num(response) <= seq_num) continue;
 
-            seq_num++;
-            delete queue.front();
-            queue.pop();
+            seq_num = get_seq_num(response);
+            while (!queue.empty() && get_seq_num(queue.front()) < seq_num) {
+                delete queue.front();
+                queue.pop_front();
+            }
             break;
         }
     }
