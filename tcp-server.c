@@ -41,9 +41,9 @@ void *serviceConnection(void *arg) {
 	perror("open"); return NULL;
     }
 
-    unsigned char buf[256];
+    unsigned char buf[65526];
     ssize_t recvlen = 0;
-    while((recvlen = rcsRecv(s, buf, 255)) >= 0) {
+    while((recvlen = rcsRecv(s, buf, 65526)) >= 0) {
 #ifdef _DEBUG_
     	if(recvlen > 0) {
     	    printf("%lu received %d bytes.\n",
@@ -60,9 +60,9 @@ void *serviceConnection(void *arg) {
 	    return NULL;
 	}
 
-	printf("Read %d bytes\n", (int)recvlen);
-	buf[recvlen] = 0;
-	printf("Content:\n%s\nContent end\n", buf);
+	//printf("Read %d bytes\n", (int)recvlen);
+	//buf[recvlen] = 0;
+	//printf("Content:\n%s\nContent end\n", buf);
 
 #if 0
 	if(write(STDOUT_FILENO, buf, recvlen) < recvlen) {

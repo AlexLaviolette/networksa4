@@ -51,7 +51,7 @@ int main(int argc, char *argv[]) {
 	perror("bind"); exit(1);
     }
 
-    unsigned char buf[256];
+    unsigned char buf[524208];
     int nread = -1;
 
     a.sin_family = AF_INET;
@@ -65,7 +65,7 @@ int main(int argc, char *argv[]) {
 	perror("connect"); exit(1);
     }
 
-    while((nread = read(STDIN_FILENO, buf, 256)) > 0) {
+    while((nread = read(STDIN_FILENO, buf, 524208)) > 0) {
 	if(rcsSend(s, buf, nread) < 0) {
 	    perror("send"); exit(1);
 	}

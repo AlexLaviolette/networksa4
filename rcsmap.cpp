@@ -24,7 +24,7 @@
 #define SYN_BIT 0x4
 #define ACK_BIT 0x2
 #define FIN_BIT 0x1
-#define MSS USHRT_MAX
+#define MSS 20000
 #define MAX_DATA_SIZE (MSS - HEADER_LEN)
 
 extern int errno;
@@ -219,7 +219,6 @@ int RcsConn::send(const void * buf, int numBytes) {
                 std::cerr << "Sending packet " << get_seq_num(queue.at(next_seq_num - seq_num)) << " expected " << next_seq_num << std::endl;
                 ucpSendTo(ucp_sock, queue.at(next_seq_num - seq_num), get_length(queue.at(next_seq_num - seq_num)) + HEADER_LEN, &destination);
             } catch (const std::out_of_range& oor) {
-                std::cerr << "out of bounds biatch" << std::endl;
                 break;
             }
             next_seq_num++;
