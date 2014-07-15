@@ -40,7 +40,7 @@ int ucpSocket()
     return(socket(AF_INET, SOCK_DGRAM, 0));
 }
 
-int ucpBind(int sockfd, const struct sockaddr_in *addr) {
+int ucpBind(int sockfd, struct sockaddr_in *addr) {
     return(bind(sockfd, (const struct sockaddr *)addr,
 		    (socklen_t)sizeof(struct sockaddr_in)));
 }
@@ -100,7 +100,7 @@ int ucpSendTo(int sockfd, const void *buf, int len, const struct sockaddr_in *to
     			(socklen_t)sizeof(struct sockaddr_in)));
 }
 
-ssize_t ucpRecvFrom(int sockfd, void *buf, int len, struct sockaddr_in *from)
+int ucpRecvFrom(int sockfd, void *buf, int len, struct sockaddr_in *from)
 {
     socklen_t addrlen = (socklen_t)sizeof(struct sockaddr_in);
     return((int)recvfrom(sockfd, buf, (size_t)len, 0, (struct sockaddr *)from,

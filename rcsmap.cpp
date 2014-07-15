@@ -1,12 +1,13 @@
 #include <iostream>
 #include <map>
 #include <queue>
+#include <errno.h>
 #include <string.h>
 #include <limits.h>
 #include <algorithm>
 #include "rcsmap.h"
-#include "mybind.cpp"
-#include "ucp.cpp"
+#include "mybind.h"
+#include "ucp.h"
 
 #define CONNECT_TIMEOUT 2000
 #define ACCEPT_TIMEOUT 1000
@@ -24,6 +25,8 @@
 #define FIN_BIT 0x1
 #define MSS USHRT_MAX
 #define MAX_DATA_SIZE (MSS - HEADER_LEN)
+
+extern int errno;
 
 RcsConn::RcsConn(): ucp_sock(ucpSocket()), seq_num(0) {}
 
