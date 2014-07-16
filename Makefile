@@ -21,4 +21,4 @@ libucp.a: ucp.o mybind.o
 	ar rvs libucp.a ucp.o mybind.o
 
 clean:
-	rm -rf *.o *.a server client rcsapp-client rcsapp-server
+	rm -rf *.o *.a [0-9]* server client rcsapp-client rcsapp-server
