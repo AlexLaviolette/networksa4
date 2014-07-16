@@ -62,6 +62,7 @@ void RcsConn::handleClose() {
     set_length(response, 0);
     set_checksum(response);
     ucpSendTo(ucp_sock, response, HEADER_LEN, &destination);
+    errno = ECONNRESET;
     std::cerr << "GOT FIN. EXITING." << std::endl;
 }
 
