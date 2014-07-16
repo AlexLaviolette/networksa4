@@ -1,5 +1,13 @@
 all: server client
 
+rcsapp: rcsapp-server rcsapp-client
+
+rcsapp-server: librcs.a rcsapp-server.o libucp.a
+	gcc -o rcsapp-server rcsapp-server.o -L. -lrcs -lucp -pthread -lstdc++
+
+rcsapp-client: librcs.a rcsapp-client.o libucp.a
+	gcc -o rcsapp-client rcsapp-client.o -L. -lrcs -lucp -lstdc++
+
 server: librcs.a tcp-server.o libucp.a
 	gcc -o server tcp-server.o -L. -lrcs -lucp -pthread -lstdc++
 
