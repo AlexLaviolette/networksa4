@@ -39,6 +39,7 @@ class RcsConn {
         void set_length(unsigned char * packet, unsigned short length);
         void set_seq_num(unsigned char * packet, unsigned short seq_num);
         void set_checksum(unsigned char * packet);
+        void handleClose();
 };
 
 class RcsMap {
