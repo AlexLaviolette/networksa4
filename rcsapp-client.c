@@ -21,11 +21,14 @@
 #include <fcntl.h>
 
 extern int rcsSocket();
-extern int rcsBind(int,struct sockaddr_in *);
-extern int rcsAccept (int , struct sockaddr_in *);
-extern int rcsConnect (int , const struct sockaddr_in *);
-extern int rcsRecv (int , void *, int );
-extern int rcsSend(int,const void *,int);
+extern int rcsBind(int, struct sockaddr_in *);
+extern int rcsGetSockName(int, struct sockaddr_in *);
+extern int rcsListen(int);
+extern int rcsAccept (int, struct sockaddr_in *);
+extern int rcsConnect (int, const struct sockaddr_in *);
+extern int rcsRecv (int, void *, int);
+extern int rcsSend(int, const void *, int);
+extern int rcsClose(int);
 
 unsigned int getrand() {
     int f = open("/dev/urandom", O_RDONLY);
@@ -55,6 +58,11 @@ int main(int argc, char *argv[]) {
     if(rcsBind(s, (struct sockaddr_in *)(&a)) < 0) {
         perror("bind"); exit(1);
     }
+
+    if(rcsGetSockName(s, &a) < 0) {
+	fprintf(stderr, "rcsGetSockName() failed. Exiting...\n");
+        exit(0);
+    }
     
     unsigned char buf[256];
     int nread = -1;
@@ -78,8 +86,7 @@ int main(int argc, char *argv[]) {
         sleep(getrand()%7);
     }
     
-    shutdown(s, SHUT_RDWR);
-    close(s);
+    rcsClose(s);
     
     return 0;
 }

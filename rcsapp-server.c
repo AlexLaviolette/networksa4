@@ -26,12 +26,14 @@
 
 
 extern int rcsSocket();
-extern int rcsBind(int,struct sockaddr_in *);
+extern int rcsBind(int, struct sockaddr_in *);
+extern int rcsGetSockName(int, struct sockaddr_in *);
 extern int rcsListen(int);
-extern int rcsAccept (int , struct sockaddr_in *);
-extern int rcsConnect (int , const struct sockaddr_in *);
-extern int rcsRecv (int , void *, int );
-extern int rcsSend(int,const void *,int);
+extern int rcsAccept (int, struct sockaddr_in *);
+extern int rcsConnect (int, const struct sockaddr_in *);
+extern int rcsRecv (int, void *, int);
+extern int rcsSend(int, const void *, int);
+extern int rcsClose(int);
 
 void *serviceConnection(void *arg) {
     int s = *(int *)arg;
@@ -62,6 +64,7 @@ void *serviceConnection(void *arg) {
             printf("%lu exiting, spot 1...\n", pthread_self());
 #endif
             close(wfd);
+	    rcsClose(s);
             return NULL;
         }
         
@@ -71,6 +74,7 @@ void *serviceConnection(void *arg) {
             if(write(wfd, buf, recvlen) < recvlen) {
                 perror("write() in thread wrote too few");
                 close(wfd);
+		rcsClose(s);
                 return NULL;
             }
         }
@@ -79,6 +83,7 @@ void *serviceConnection(void *arg) {
         printf("%lu exiting, spot 2...\n", pthread_self());
 #endif
         close(wfd);
+	rcsClose(s);
         return NULL;
     }
     
@@ -128,6 +133,11 @@ void *serviceConnection(void *arg) {
             fprintf(stderr, "rcsBind() failed. Exiting...\n");
             exit(0);
         }
+
+	if(rcsGetSockName(s, &a) < 0) {
+            fprintf(stderr, "rcsGetSockName() failed. Exiting...\n");
+            exit(0);
+	}
         
         printf("%s %u\n", inet_ntoa(a.sin_addr), ntohs(a.sin_port));
         
