@@ -321,7 +321,7 @@ void RcsConn::set_seq_num(unsigned char * packet, unsigned short seq_num) {
 
 
 RcsMap::RcsMap(): nextId(1) {
-    pthread_mutex_init(&map_m);
+    pthread_mutex_init(&map_m, NULL);
 }
 
 RcsMap::~RcsMap() {
