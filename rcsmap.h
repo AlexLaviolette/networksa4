@@ -5,6 +5,7 @@
 #include <deque>
 #include <utility>
 #include <netinet/in.h>
+#include <pthread.h>
 
 class RcsMap;
 
@@ -43,6 +44,7 @@ class RcsConn {
 class RcsMap {
     std::map<unsigned int, RcsConn> map;
     unsigned int nextId;
+    pthread_mutex_t map_m;
 
     public:
         class NotFound: public std::exception {};

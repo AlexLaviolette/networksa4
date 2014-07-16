@@ -320,30 +320,43 @@ void RcsConn::set_seq_num(unsigned char * packet, unsigned short seq_num) {
 
 
 
-RcsMap::RcsMap(): nextId(1) {}
+RcsMap::RcsMap(): nextId(1) {
+    pthread_mutex_init(&map_m);
+}
 
-RcsMap::~RcsMap() {}
+RcsMap::~RcsMap() {
+    pthread_mutex_destroy(&map_m);
+}
 
 RcsConn & RcsMap::get(unsigned int sockId) {
+    pthread_mutex_lock(&map_m);
     std::map<unsigned int, RcsConn>::iterator it = map.find(sockId);
-    if (it == map.end()) {
+    std::map<unsigned int, RcsConn>::iterator end = map.end();
+    pthread_mutex_unlock(&map_m);
+    if (it == end) {
         throw NotFound();
     }
     return it->second;
 }
 
 std::pair<unsigned int, RcsConn &> RcsMap::newConn() {
+    pthread_mutex_lock(&map_m);
     std::pair<unsigned int, RcsConn &> ret(nextId, map[nextId]);
     nextId++;
+    pthread_mutex_unlock(&map_m);
     return ret;
 }
 
 int RcsMap::close(unsigned int sockId) {
+    int ret = -1;
+    pthread_mutex_lock(&map_m);
     std::map<unsigned int, RcsConn>::iterator it = map.find(sockId);
-    if (it == map.end()) {
-        return -1;
+    if (it != map.end()) {
+        pthread_mutex_unlock(&map_m);
+        ret = it->second.close();
+        pthread_mutex_lock(&map_m);
+        map.erase(it);
     }
-    int ret = it->second.close();
-    map.erase(it);
+    pthread_mutex_unlock(&map_m);
     return ret;
 }
