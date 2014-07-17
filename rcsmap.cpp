@@ -10,11 +10,11 @@
 #include "ucp.h"
 #include <stdexcept>
 
-#define CONNECT_TIMEOUT 2000
-#define ACCEPT_TIMEOUT 1000
-#define SEND_TIMEOUT 2000
-#define RECV_TIMEOUT 1000
-#define SYN_ACK_TIMEOUT 5000
+#define CONNECT_TIMEOUT 50
+#define ACCEPT_TIMEOUT 50
+#define SEND_TIMEOUT 50
+#define RECV_TIMEOUT 50
+#define SYN_ACK_TIMEOUT 500
 
 #define HEADER_LEN 8
 #define FLAGS 0
