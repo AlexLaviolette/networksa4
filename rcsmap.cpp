@@ -37,7 +37,12 @@ RcsConn::RcsConn(const RcsConn & conn):
     queue(conn.queue),
     seq_num(conn.seq_num) {}
 
-RcsConn::~RcsConn() {}
+RcsConn::~RcsConn() {
+    while (!queue.empty()) {
+        delete[] queue.front();
+        queue.pop_front();
+    }
+}
 
 int RcsConn::getSocketID() {
     return ucp_sock;
@@ -165,50 +170,55 @@ int RcsConn::connect(const sockaddr_in * addr) {
 }
 
 int RcsConn::recv(void * buf, int maxBytes) {
+    int size = out_queue.pop(buf, maxBytes);
+    if (size > 0) {
+        return size;
+    }
+
     ucpSetSockRecvTimeout(ucp_sock, RECV_TIMEOUT);
 
     sockaddr_in addr;
-    int amount_recvd = 0;
-
-    unsigned char* request = new unsigned char[maxBytes + HEADER_LEN];
-    if (!request) return -1;
+    unsigned char* request = NULL;
 
     while(1) {
+        if (!request) {
+            request = new unsigned char[MSS];
+            if (!request) return -1;
+        }
+
         errno = 0;
-        amount_recvd = ucpRecvFrom(ucp_sock, request, maxBytes + HEADER_LEN, &addr);
+        int amount_recvd = ucpRecvFrom(ucp_sock, request, MSS, &addr);
         if (errno & (EAGAIN | EWOULDBLOCK)) continue;
+
         std::cerr << "Got packet" << std::endl;
 
-        if (!(get_length(request) != amount_recvd - HEADER_LEN || is_corrupt(request))) {
-            std::cerr << "Seq num " << get_seq_num(request) << " expected " <<  seq_num << std::endl;
+        bool badPacket = get_length(request) != amount_recvd - HEADER_LEN || is_corrupt(request);
+        unsigned short request_seq_num = get_seq_num(request);
+
+        if (!badPacket) {
+            if (get_flags(request) & FIN_BIT) {
+                handleClose();
+                delete[] request;
+                return -1;
+            }
+
+            std::cerr << "Seq num " << request_seq_num << " expected " <<  seq_num << std::endl;
+            out_queue.push(request, seq_num);
+            request = NULL;
         }
 
-        if (get_flags(request) & FIN_BIT) {
-            handleClose();
-            return -1;
-        }
+        seq_num = out_queue.getNextSeqNum(seq_num);
 
-        if (get_length(request) != amount_recvd - HEADER_LEN || is_corrupt(request) || get_seq_num(request) != seq_num) {
-            unsigned char response[HEADER_LEN] = {0};
-            set_flags(response, ACK_BIT);
-            set_seq_num(response, seq_num);
-            set_checksum(response);
-            ucpSendTo(ucp_sock, response, HEADER_LEN, &addr);
-            continue;
-        }
+        unsigned char response[HEADER_LEN] = {0};
+        set_flags(response, ACK_BIT);
+        set_seq_num(response, seq_num);
+        set_checksum(response);
+        ucpSendTo(ucp_sock, response, HEADER_LEN, &addr);
+
+        if (badPacket || request_seq_num > seq_num) continue;
         break;
     }
-
-    seq_num++;
-    memcpy(buf, request + HEADER_LEN, amount_recvd - HEADER_LEN);
-
-    unsigned char response[HEADER_LEN] = {0};
-    set_flags(response, ACK_BIT);
-    set_seq_num(response, seq_num);
-    set_checksum(response);
-    ucpSendTo(ucp_sock, response, HEADER_LEN, &addr);
-
-    return amount_recvd - HEADER_LEN;
+    return recv(buf, maxBytes);
 }
 
 int RcsConn::send(const void * buf, int numBytes) {
@@ -221,10 +231,6 @@ int RcsConn::send(const void * buf, int numBytes) {
         unsigned int dataSize = std::min(MAX_DATA_SIZE, (int) (numBytes - (chunk - charBuf)));
         unsigned char * packet = new unsigned char[dataSize + HEADER_LEN];
         if (!packet) {
-            while (!queue.empty()) {
-                delete queue.front();
-                queue.pop_front();
-            }
             return -1;
         }
 
@@ -282,7 +288,7 @@ int RcsConn::send(const void * buf, int numBytes) {
 
             seq_num = get_seq_num(response);
             while (!queue.empty() && get_seq_num(queue.front()) < seq_num) {
-                delete queue.front();
+                delete[] queue.front();
                 queue.pop_front();
             }
             break;
@@ -322,59 +328,6 @@ int RcsConn::close() {
     return ucpClose(ucp_sock);
 }
 
-
-bool RcsConn::is_corrupt(const unsigned char * packet) {
-    unsigned short checksum;
-    memcpy(&checksum, packet + CHECKSUM, 2);
-    return checksum != calculate_checksum(packet);
-}
-
-void RcsConn::set_checksum(unsigned char * packet) {
-    unsigned short checksum = calculate_checksum(packet);
-    memcpy(packet + CHECKSUM, &checksum, 2);
-}
-
-unsigned short RcsConn::calculate_checksum(const unsigned char * packet) {
-    unsigned short length = get_length(packet) + HEADER_LEN;
-    unsigned short checksum = 0;
-    for (const unsigned char * it = packet; it - packet < length; it += 2) {
-        if (it - packet == CHECKSUM) continue;
-        unsigned short word = 0;
-        memcpy(&word, it, std::min(2, (int) (length - (it - packet))));
-        checksum ^= word;
-    }
-    return checksum;
-}
-
-unsigned short RcsConn::get_flags(const unsigned char * packet) {
-    unsigned short flags;
-    memcpy(&flags, packet + FLAGS, 2);
-    return flags;
-}
-
-void RcsConn::set_flags(unsigned char * packet, unsigned short flags) {
-    memcpy(packet + FLAGS, &flags, 2);
-}
-
-unsigned short RcsConn::get_length(const unsigned char * packet) {
-    unsigned short length;
-    memcpy(&length, packet + LENGTH, 2);
-    return length;
-}
-
-void RcsConn::set_length(unsigned char * packet, unsigned short length) {
-    memcpy(packet + LENGTH, &length, 2);
-}
-
-unsigned short RcsConn::get_seq_num(const unsigned char * packet) {
-    unsigned short seq_num;
-    memcpy(&seq_num, packet + SEQ_NUM, 2);
-    return seq_num;
-}
-
-void RcsConn::set_seq_num(unsigned char * packet, unsigned short seq_num) {
-    memcpy(packet + SEQ_NUM, &seq_num, 2);
-}
 
 
 
@@ -417,4 +370,117 @@ int RcsMap::close(unsigned int sockId) {
     }
     pthread_mutex_unlock(&map_m);
     return ret;
+}
+
+
+
+OutQueue::OutQueue(): offset(0) {}
+OutQueue::~OutQueue() {
+    for (firstqueue::iterator it = queue.begin(); it != queue.end(); it++) {
+        delete[] it->second;
+    }
+    for (secondqueue::iterator it = buf.begin(); it != buf.end(); it++) {
+        delete[] *it;
+    }
+}
+
+void OutQueue::push(unsigned char * src, unsigned short cur_seq_num) {
+    unsigned short src_seq_num = get_seq_num(src);
+    if (src_seq_num < cur_seq_num) {
+        delete[] src;
+        return;
+    }
+
+    firstqueue::iterator existing = queue.find(src_seq_num);
+    if (existing != queue.end()) {
+        delete[] existing->second;
+        existing->second = src;
+    } else {
+        queue[src_seq_num] = src;
+    }
+
+    firstqueue::iterator it = queue.begin();
+    while (it != queue.end() && it->first == cur_seq_num) {
+        buf.push_back(it->second);
+        firstqueue::iterator temp = it;
+        it++;
+        queue.erase(temp);
+        cur_seq_num++;
+    }
+}
+
+int OutQueue::pop(void * dest, int maxBytes) {
+    if (buf.empty()) return -1;
+    if (offset + maxBytes >= get_length(buf.front())) {
+        maxBytes = get_length(buf.front()) - offset;
+        memcpy(dest, buf.front() + HEADER_LEN + offset, maxBytes);
+        delete[] buf.front();
+        buf.pop_front();
+        offset = 0;
+    } else {
+        memcpy(dest, buf.front() + HEADER_LEN + offset, maxBytes);
+        offset += maxBytes;
+    }
+    return maxBytes;
+}
+
+unsigned short OutQueue::getNextSeqNum(unsigned short seq_num) {
+    if (buf.empty()) return seq_num;
+    return get_seq_num(buf.back()) + 1;
+}
+
+
+
+
+bool is_corrupt(const unsigned char * packet) {
+    unsigned short checksum;
+    memcpy(&checksum, packet + CHECKSUM, 2);
+    return checksum != calculate_checksum(packet);
+}
+
+void set_checksum(unsigned char * packet) {
+    unsigned short checksum = calculate_checksum(packet);
+    memcpy(packet + CHECKSUM, &checksum, 2);
+}
+
+unsigned short calculate_checksum(const unsigned char * packet) {
+    unsigned short length = get_length(packet) + HEADER_LEN;
+    unsigned short checksum = 0;
+    for (const unsigned char * it = packet; it - packet < length; it += 2) {
+        if (it - packet == CHECKSUM) continue;
+        unsigned short word = 0;
+        memcpy(&word, it, std::min(2, (int) (length - (it - packet))));
+        checksum ^= word;
+    }
+    return checksum;
+}
+
+unsigned short get_flags(const unsigned char * packet) {
+    unsigned short flags;
+    memcpy(&flags, packet + FLAGS, 2);
+    return flags;
+}
+
+void set_flags(unsigned char * packet, unsigned short flags) {
+    memcpy(packet + FLAGS, &flags, 2);
+}
+
+unsigned short get_length(const unsigned char * packet) {
+    unsigned short length;
+    memcpy(&length, packet + LENGTH, 2);
+    return length;
+}
+
+void set_length(unsigned char * packet, unsigned short length) {
+    memcpy(packet + LENGTH, &length, 2);
+}
+
+unsigned short get_seq_num(const unsigned char * packet) {
+    unsigned short seq_num;
+    memcpy(&seq_num, packet + SEQ_NUM, 2);
+    return seq_num;
+}
+
+void set_seq_num(unsigned char * packet, unsigned short seq_num) {
+    memcpy(packet + SEQ_NUM, &seq_num, 2);
 }

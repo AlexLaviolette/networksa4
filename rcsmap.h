@@ -7,12 +7,28 @@
 #include <netinet/in.h>
 #include <pthread.h>
 
+class OutQueue {
+    typedef std::map<unsigned short, unsigned char *> firstqueue;
+    typedef std::deque<unsigned char *> secondqueue;
+    firstqueue queue;
+    secondqueue buf;
+    int offset;
+
+    public:
+        OutQueue();
+        ~OutQueue();
+        int pop(void * dest, int maxBytes);
+        void push(unsigned char * buf, unsigned short cur_seq_num);
+        unsigned short getNextSeqNum(unsigned short seq_num);
+};
+
 class RcsMap;
 
 class RcsConn {
     unsigned int ucp_sock;
     sockaddr_in destination;
     std::deque<unsigned char *> queue;
+    OutQueue out_queue;
     unsigned int seq_num;
 
     public:
@@ -30,15 +46,6 @@ class RcsConn {
         int getSocketID();
 
     private:
-        bool is_corrupt(const unsigned char * packet);
-        unsigned short get_flags(const unsigned char * packet);
-        unsigned short get_length(const unsigned char * packet);
-        unsigned short get_seq_num(const unsigned char * packet);
-        unsigned short calculate_checksum(const unsigned char * packet);
-        void set_flags(unsigned char * packet, unsigned short flags);
-        void set_length(unsigned char * packet, unsigned short length);
-        void set_seq_num(unsigned char * packet, unsigned short seq_num);
-        void set_checksum(unsigned char * packet);
         void handleClose();
 };
 
@@ -55,5 +62,15 @@ class RcsMap {
         std::pair<unsigned int, RcsConn &> newConn();
         int close(unsigned int sockId);
 };
+
+bool is_corrupt(const unsigned char * packet);
+unsigned short get_flags(const unsigned char * packet);
+unsigned short get_length(const unsigned char * packet);
+unsigned short get_seq_num(const unsigned char * packet);
+unsigned short calculate_checksum(const unsigned char * packet);
+void set_flags(unsigned char * packet, unsigned short flags);
+void set_length(unsigned char * packet, unsigned short length);
+void set_seq_num(unsigned char * packet, unsigned short seq_num);
+void set_checksum(unsigned char * packet);
 
 #endif
