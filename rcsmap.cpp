@@ -29,13 +29,24 @@
 
 extern int errno;
 
-RcsConn::RcsConn(): ucp_sock(ucpSocket()), seq_num(0) {}
+RcsConn::RcsConn():
+        ucp_sock(ucpSocket()), seq_num(0), closed(false) {
+    memset(&destination, 0, sizeof(sockaddr_in));
+}
 
 RcsConn::RcsConn(const RcsConn & conn):
-    ucp_sock(conn.ucp_sock),
-    destination(conn.destination),
-    queue(conn.queue),
-    seq_num(conn.seq_num) {}
+        ucp_sock(conn.ucp_sock),
+        destination(conn.destination),
+        out_queue(conn.out_queue),
+        seq_num(conn.seq_num),
+        closed(conn.closed) {
+    for (std::deque<unsigned char *>::const_iterator it = conn.queue.begin(); it != conn.queue.end(); it++) {
+        int len = strlen((char *)*it);
+        unsigned char * cpy = new unsigned char[len];
+        memcpy(cpy, *it, len);
+        queue.push_back(cpy);
+    }
+}
 
 RcsConn::~RcsConn() {
     while (!queue.empty()) {
@@ -46,6 +57,10 @@ RcsConn::~RcsConn() {
 
 int RcsConn::getSocketID() {
     return ucp_sock;
+}
+
+const sockaddr_in & RcsConn::getDestination() {
+    return destination;
 }
 
 int RcsConn::bind(sockaddr_in * addr) {
@@ -61,13 +76,20 @@ int RcsConn::listen() {
 }
 
 void RcsConn::handleClose() {
-    unsigned char response[HEADER_LEN] = {0};
-    set_flags(response, ACK_BIT);
-    set_seq_num(response, 0);
-    set_length(response, 0);
-    set_checksum(response);
-    ucpSendTo(ucp_sock, response, HEADER_LEN, &destination);
+    if (closed) return;
+
+    if (destination.sin_addr.s_addr) {
+        unsigned char response[HEADER_LEN] = {0};
+        set_flags(response, ACK_BIT);
+        set_seq_num(response, 0);
+        set_length(response, 0);
+        set_checksum(response);
+        ucpSendTo(ucp_sock, response, HEADER_LEN, &destination);
+    }
+
+    ucpClose(ucp_sock);
     errno = ECONNRESET;
+    closed = true;
     std::cerr << "GOT FIN. EXITING." << std::endl;
 }
 
@@ -89,11 +111,11 @@ int RcsConn::accept(sockaddr_in * addr, RcsMap & map) {
         }
         if (get_seq_num(request) != 0) continue;
         if ((get_flags(request) & (SYN_BIT|ACK_BIT)) != SYN_BIT) continue;
+        if (map.isBound(*addr)) continue;
         break;
     }
 
-    std::pair<unsigned int, RcsConn &> newConn = map.newConn();
-    newConn.second.destination = *addr;
+    std::pair<unsigned int, RcsConn &> newConn(map.newConn());
 
     sockaddr_in local_addr;
     getSockName(&local_addr);
@@ -107,8 +129,9 @@ int RcsConn::accept(sockaddr_in * addr, RcsMap & map) {
     set_flags(request, SYN_BIT | ACK_BIT);
     set_checksum(request);
 
-    unsigned int conn_sock = newConn.second.getSocketID();
+    unsigned int conn_sock = newConn.second.ucp_sock;
     ucpSetSockRecvTimeout(conn_sock, SYN_ACK_TIMEOUT);
+    newConn.second.destination = *addr;
 
     while (1) {
         ucpSendTo(conn_sock, request, HEADER_LEN, addr);
@@ -119,7 +142,7 @@ int RcsConn::accept(sockaddr_in * addr, RcsMap & map) {
         if (get_length(response) != length - HEADER_LEN) continue;
         if (is_corrupt(response)) continue;
         if (get_flags(response) & FIN_BIT) {
-            handleClose();
+            newConn.second.handleClose();
             return -1;
         }
         if (get_seq_num(response) != 0) continue;
@@ -325,18 +348,25 @@ int RcsConn::close() {
         break;
     }
 
+    closed = true;
     return ucpClose(ucp_sock);
 }
 
 
 
+bool sockaddr_comp::operator()(const sockaddr_in & a, const sockaddr_in & b) {
+    return memcmp(&a, &b, sizeof(sockaddr_in)) < 0;
+}
+
 
 RcsMap::RcsMap(): nextId(1) {
     pthread_mutex_init(&map_m, NULL);
+    pthread_mutex_init(&addr_m, NULL);
 }
 
 RcsMap::~RcsMap() {
     pthread_mutex_destroy(&map_m);
+    pthread_mutex_destroy(&addr_m);
 }
 
 RcsConn & RcsMap::get(unsigned int sockId) {
@@ -358,13 +388,36 @@ std::pair<unsigned int, RcsConn &> RcsMap::newConn() {
     return ret;
 }
 
+bool RcsMap::isBound(const sockaddr_in & addr) {
+    pthread_mutex_lock(&addr_m);
+    bool bound = boundAddrs.find(addr) != boundAddrs.end();
+    pthread_mutex_unlock(&addr_m);
+    return bound;
+}
+
+int RcsMap::accept(unsigned int sockId, sockaddr_in * addr) {
+    int connSoc = get(sockId).accept(addr, *this);
+    if (connSoc > 0) {
+        pthread_mutex_lock(&addr_m);
+        boundAddrs.insert(*addr);
+        pthread_mutex_unlock(&addr_m);
+    }
+    return connSoc;
+}
+
 int RcsMap::close(unsigned int sockId) {
     int ret = -1;
     pthread_mutex_lock(&map_m);
     std::map<unsigned int, RcsConn>::iterator it = map.find(sockId);
     if (it != map.end()) {
         pthread_mutex_unlock(&map_m);
+
         ret = it->second.close();
+
+        pthread_mutex_lock(&addr_m);
+        boundAddrs.erase(it->second.getDestination());
+        pthread_mutex_unlock(&addr_m);
+
         pthread_mutex_lock(&map_m);
         map.erase(it);
     }
@@ -375,6 +428,22 @@ int RcsMap::close(unsigned int sockId) {
 
 
 OutQueue::OutQueue(): offset(0) {}
+
+OutQueue::OutQueue(const OutQueue & other): offset(other.offset) {
+    for (firstqueue::const_iterator it = other.queue.begin(); it != other.queue.end(); it++) {
+        int len = strlen((char *)it->second);
+        unsigned char * cpy = new unsigned char[len];
+        memcpy(cpy, it->second, len);
+        queue[it->first] = cpy;
+    }
+    for (secondqueue::const_iterator it = other.buf.begin(); it != other.buf.end(); it++) {
+        int len = strlen((char *)*it);
+        unsigned char * cpy = new unsigned char[len];
+        memcpy(cpy, *it, len);
+        buf.push_back(cpy);
+    }
+}
+
 OutQueue::~OutQueue() {
     for (firstqueue::iterator it = queue.begin(); it != queue.end(); it++) {
         delete[] it->second;

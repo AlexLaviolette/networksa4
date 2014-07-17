@@ -48,7 +48,7 @@ int rcsListen(int socketID) {
 // that can be used to rcsSend () and rcsRecv () with the peer (client).
 int rcsAccept(int socketID, sockaddr_in * addr) {
     try {
-        return rcsMap.get(socketID).accept(addr, rcsMap);
+        return rcsMap.accept(socketID, addr);
     } catch (RcsMap::NotFound n) {
         return -1;
     }

@@ -3,6 +3,7 @@
 
 #include <map>
 #include <deque>
+#include <set>
 #include <utility>
 #include <netinet/in.h>
 #include <pthread.h>
@@ -16,11 +17,17 @@ class OutQueue {
 
     public:
         OutQueue();
+        OutQueue(const OutQueue & other);
         ~OutQueue();
         int pop(void * dest, int maxBytes);
         void push(unsigned char * buf, unsigned short cur_seq_num);
         unsigned short getNextSeqNum(unsigned short seq_num);
 };
+
+struct sockaddr_comp {
+    bool operator()(const sockaddr_in & a, const sockaddr_in & b);
+};
+typedef std::set<sockaddr_in, sockaddr_comp> addrSet;
 
 class RcsMap;
 
@@ -30,6 +37,7 @@ class RcsConn {
     std::deque<unsigned char *> queue;
     OutQueue out_queue;
     unsigned int seq_num;
+    bool closed;
 
     public:
         RcsConn();
@@ -44,6 +52,7 @@ class RcsConn {
         int send(const void * buf, int numBytes);
         int close();
         int getSocketID();
+        const sockaddr_in & getDestination();
 
     private:
         void handleClose();
@@ -51,14 +60,18 @@ class RcsConn {
 
 class RcsMap {
     std::map<unsigned int, RcsConn> map;
+    addrSet boundAddrs;
     unsigned int nextId;
     pthread_mutex_t map_m;
+    pthread_mutex_t addr_m;
 
     public:
         class NotFound: public std::exception {};
         RcsMap();
         ~RcsMap();
         RcsConn & get(unsigned int sockId);
+        bool isBound(const sockaddr_in & addr);
+        int accept(unsigned int sockId, sockaddr_in * addr);
         std::pair<unsigned int, RcsConn &> newConn();
         int close(unsigned int sockId);
 };
