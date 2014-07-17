@@ -14,8 +14,8 @@ server: librcs.a tcp-server.o libucp.a
 client: librcs.a tcp-client.o libucp.a
 	gcc -o client tcp-client.o -L. -lrcs -lucp -lstdc++
 
-librcs.a: rcs.o rcsmap.o
-	ar rvs librcs.a rcs.o rcsmap.o
+librcs.a: rcs.o rcsmap.o rcsconn.o outqueue.o packet.o
+	ar rvs librcs.a rcs.o rcsmap.o rcsconn.o outqueue.o packet.o
 
 libucp.a: ucp.o mybind.o
 	ar rvs libucp.a ucp.o mybind.o
