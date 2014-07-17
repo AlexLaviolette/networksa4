@@ -1,24 +1,22 @@
-all: server client
+RCS_OBJS = rcs.o rcsmap.o rcsconn.o outqueue.o packet.o
+UCP_OBJS = ucp.o mybind.o
+LINK_FLAGS = -L. -lrcs -lucp -pthread -lstdc++
+
+all: rcsapp
 
 rcsapp: rcsapp-server rcsapp-client
 
 rcsapp-server: librcs.a rcsapp-server.o libucp.a
-	gcc -o rcsapp-server rcsapp-server.o -L. -lrcs -lucp -pthread -lstdc++
+	gcc -o rcsapp-server rcsapp-server.o $(LINK_FLAGS)
 
 rcsapp-client: librcs.a rcsapp-client.o libucp.a
-	gcc -o rcsapp-client rcsapp-client.o -L. -lrcs -lucp -lstdc++
+	gcc -o rcsapp-client rcsapp-client.o $(LINK_FLAGS)
 
-server: librcs.a tcp-server.o libucp.a
-	gcc -o server tcp-server.o -L. -lrcs -lucp -pthread -lstdc++
+librcs.a: $(RCS_OBJS)
+	ar rvs librcs.a $(RCS_OBJS)
 
-client: librcs.a tcp-client.o libucp.a
-	gcc -o client tcp-client.o -L. -lrcs -lucp -lstdc++
-
-librcs.a: rcs.o rcsmap.o rcsconn.o outqueue.o packet.o
-	ar rvs librcs.a rcs.o rcsmap.o rcsconn.o outqueue.o packet.o
-
-libucp.a: ucp.o mybind.o
-	ar rvs libucp.a ucp.o mybind.o
+libucp.a: $(UCP_OBJS)
+	ar rvs libucp.a $(UCP_OBJS)
 
 clean:
-	rm -rf *.o *.a [0-9]* server client rcsapp-client rcsapp-server
+	rm -rf *.o *.a [0-9]* rcsapp-client rcsapp-server
