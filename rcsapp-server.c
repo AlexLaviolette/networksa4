@@ -51,20 +51,20 @@ void *serviceConnection(void *arg) {
     unsigned char buf[256];
     ssize_t recvlen = 0;
     while((recvlen = rcsRecv(s, buf, 256)) >= 0) {
-#ifdef _DEBUG_
+//#ifdef _DEBUG_
         if(recvlen > 0) {
             printf("%lu received %d bytes.\n",
                    pthread_self(), recvlen);
         }
-#endif
+//#endif
         
         if(recvlen <= 0) {
             /* quit */
-#ifdef _DEBUG_
+//#ifdef _DEBUG_
             printf("%lu exiting, spot 1...\n", pthread_self());
-#endif
+//#endif
             close(wfd);
-	    rcsClose(s);
+        rcsClose(s);
             return NULL;
         }
         
@@ -74,16 +74,16 @@ void *serviceConnection(void *arg) {
             if(write(wfd, buf, recvlen) < recvlen) {
                 perror("write() in thread wrote too few");
                 close(wfd);
-		rcsClose(s);
+        rcsClose(s);
                 return NULL;
             }
         }
         
-#ifdef _DEBUG_
+//#ifdef _DEBUG_
         printf("%lu exiting, spot 2...\n", pthread_self());
-#endif
+//#endif
         close(wfd);
-	rcsClose(s);
+    rcsClose(s);
         return NULL;
     }
     
@@ -134,10 +134,10 @@ void *serviceConnection(void *arg) {
             exit(0);
         }
 
-	if(rcsGetSockName(s, &a) < 0) {
+    if(rcsGetSockName(s, &a) < 0) {
             fprintf(stderr, "rcsGetSockName() failed. Exiting...\n");
             exit(0);
-	}
+    }
         
         printf("%s %u\n", inet_ntoa(a.sin_addr), ntohs(a.sin_port));
         
@@ -161,3 +161,4 @@ void *serviceConnection(void *arg) {
         
         return 0;
     }
+

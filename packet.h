@@ -6,9 +6,12 @@
 #define SEQ_NUM 2
 #define LENGTH 4
 #define CHECKSUM 6
+
+#define SEND_BIT 0x8
 #define SYN_BIT 0x4
 #define ACK_BIT 0x2
 #define FIN_BIT 0x1
+
 #define MSS 20000
 #define MAX_DATA_SIZE (MSS - HEADER_LEN)
 

@@ -14,11 +14,12 @@
 #define SEND_TIMEOUT 50
 #define RECV_TIMEOUT 50
 #define SYN_ACK_TIMEOUT 500
+#define CLOSE_TIMEOUT 500
 
 #define MAX_SYN_ACK_RETRIES 10
 #define MAX_SYN_RETRIES 100
 #define MAX_RECV_RETRIES 1000
-#define MAX_SEND_RETRIES 50
+#define MAX_SEND_RETRIES 500
 #define MAX_CLOSE_RETRIES 10
 
 #define WINDOW_SIZE 4
@@ -74,6 +75,24 @@ int RcsConn::listen() {
     return 0;
 }
 
+void RcsConn::handleClose() {
+    if (closed) return;
+
+    if (destination.sin_addr.s_addr) {
+        unsigned char response[HEADER_LEN] = {0};
+        set_flags(response, ACK_BIT);
+        set_seq_num(response, seq_num);
+        set_length(response, 0);
+        set_checksum(response);
+        ucpSendTo(ucp_sock, response, HEADER_LEN, &destination);
+    }
+
+    ucpClose(ucp_sock);
+    errno = ECONNRESET;
+    closed = true;
+    std::cerr << "GOT FIN. EXITING." << std::endl;
+}
+
 // Accept incoming connection, create new RcsConn in map, and store destination in "addr"
 int RcsConn::accept(sockaddr_in * addr, RcsMap & map) {
     if (closed) return -1;
@@ -86,11 +105,7 @@ int RcsConn::accept(sockaddr_in * addr, RcsMap & map) {
     while (1) {
         errno = 0;
         int length = ucpRecvFrom(ucp_sock, request, HEADER_LEN, addr);
-        if (errno & (EAGAIN | EWOULDBLOCK)) continue;
-        if (errno & ECONNRESET) {
-            close();
-            return -1;
-        }
+        if ((errno == EAGAIN) || (errno == EWOULDBLOCK)) continue;
         if (length < 0) return length;
 
         if (get_length(request) != length - HEADER_LEN) continue;
@@ -125,26 +140,26 @@ int RcsConn::accept(sockaddr_in * addr, RcsMap & map) {
 
         errno = 0;
         int length = ucpRecvFrom(conn_sock, response, HEADER_LEN, addr);
-        if (errno & (EAGAIN | EWOULDBLOCK)) {
+        if ((errno == EAGAIN) || (errno == EWOULDBLOCK)) {
             unsuccessful_reads++;
             if (unsuccessful_reads == MAX_SYN_ACK_RETRIES) {
-                //std::cerr << "MAX_SYN_ACK_RETRIES" << std::endl;
-                newConn.second.close();
-                return -1;
+                std::cerr << "MAX_SYN_ACK_RETRIES" << std::endl;
+                newConn.second.seq_num++;
+                newConn.second.handleClose();
+                return accept(addr, map);
             }
             continue;
         }
         unsuccessful_reads = 0;
 
-        if (errno & ECONNRESET) {
-            close();
-            return -1;
-        }
         if (length < 0) return length;
-
         if (get_length(response) != length - HEADER_LEN) continue;
         if (is_corrupt(response)) continue;
-        if (get_seq_num(response) != 0) continue;
+        if (get_flags(response) & FIN_BIT) {
+            newConn.second.seq_num++;
+            newConn.second.handleClose();
+            return accept(addr, map);
+        }
         if ((get_flags(response) & (SYN_BIT|ACK_BIT)) != ACK_BIT) continue;
         break;
     }
@@ -156,10 +171,9 @@ int RcsConn::accept(sockaddr_in * addr, RcsMap & map) {
 int RcsConn::connect(const sockaddr_in * addr) {
     if (closed) return -1;
 
-    destination = *addr;
-
     sockaddr_in local_addr;
     getSockName(&local_addr);
+    sockaddr_in remote_addr = *addr;
 
     ucpSetSockRecvTimeout(ucp_sock, CONNECT_TIMEOUT);
 
@@ -170,38 +184,38 @@ int RcsConn::connect(const sockaddr_in * addr) {
 
     unsigned int unsuccessful_reads = 0;
     while (1) {
-        ucpSendTo(ucp_sock, request, HEADER_LEN, &destination);
+        ucpSendTo(ucp_sock, request, HEADER_LEN, &remote_addr);
 
         errno = 0;
-        int length = ucpRecvFrom(ucp_sock, response, HEADER_LEN, &destination);
-        if (errno & (EAGAIN | EWOULDBLOCK)) {
+        int length = ucpRecvFrom(ucp_sock, response, HEADER_LEN, &remote_addr);
+        if ((errno == EAGAIN) || (errno == EWOULDBLOCK)) {
             unsuccessful_reads++;
             if (unsuccessful_reads == MAX_SYN_RETRIES) {
-                //std::cerr << "MAX_SYN_RETRIES" << std::endl;
-                close();
+                std::cerr << "MAX_SYN_RETRIES" << std::endl;
+                handleClose();
                 return -1;
             }
             continue;
         }
         unsuccessful_reads = 0;
 
-        if (errno & ECONNRESET) {
-            close();
-            return -1;
-        }
         if (length < 0) return length;
-
         if (get_length(response) != length - HEADER_LEN) continue;
         if (is_corrupt(response)) continue;
-        if (get_seq_num(response) != 0) continue;
+        if (get_flags(response) & FIN_BIT) {
+            seq_num++;
+            handleClose();
+            return -1;
+        }
         if ((get_flags(response) & (SYN_BIT|ACK_BIT)) != (SYN_BIT|ACK_BIT)) continue;
         break;
     }
 
     set_flags(response, ACK_BIT);
     set_checksum(response);
-    ucpSendTo(ucp_sock, response, HEADER_LEN, &destination);
+    ucpSendTo(ucp_sock, response, HEADER_LEN, &remote_addr);
 
+    destination = remote_addr;
     seq_num++;
     return 0;
 }
@@ -212,6 +226,7 @@ int RcsConn::recv(void * buf, int maxBytes) {
         return size;
     }
     if (closed) return -1;
+    std::cerr << "recving" << seq_num << std::endl;
 
     ucpSetSockRecvTimeout(ucp_sock, RECV_TIMEOUT);
 
@@ -227,50 +242,55 @@ int RcsConn::recv(void * buf, int maxBytes) {
 
         errno = 0;
         int amount_recvd = ucpRecvFrom(ucp_sock, request, MSS, &addr);
-        if (errno & (EAGAIN | EWOULDBLOCK)) {
+        if ((errno == EAGAIN) || (errno == EWOULDBLOCK)) {
             unsuccessful_reads++;
             if (unsuccessful_reads > MAX_RECV_RETRIES) {
-                //std::cerr << "MAX_RECV_RETRIES" << std::endl;
-                close();
-                delete[] request;
+                std::cerr << "MAX_RECV_RETRIES" << std::endl;
+                handleClose();
+                if (request) delete[] request;
                 return -1;
             }
             continue;
         }
         unsuccessful_reads = 0;
 
-        if (errno & ECONNRESET) {
-            close();
-            delete[] request;
-            return -1;
-        }
+        std::cerr << "Read " << amount_recvd << std::endl;
         if (amount_recvd < 0) {
-            delete[] request;
+            if (request) delete[] request;
             return amount_recvd;
         }
 
-        //std::cerr << "Got packet" << std::endl;
-
+        std::cerr << "Got packet" << std::endl;
         bool badPacket = get_length(request) != amount_recvd - HEADER_LEN || is_corrupt(request);
         bool isExpectedPacket = false;
+        bool isFinPacket = false;
 
         if (!badPacket) {
-            unsigned short request_seq_num = get_seq_num(request);
-            if (request_seq_num >= seq_num) {
-                //std::cerr << "Seq num " << request_seq_num << " expected " <<  seq_num << std::endl;
-                out_queue.push(request, seq_num);
-                request = NULL;
-                isExpectedPacket = request_seq_num == seq_num;
+            unsigned short flags = get_flags(request);
+            if (!(flags & (SYN_BIT|ACK_BIT))) {
+                unsigned short request_seq_num = get_seq_num(request);
+                if (request_seq_num >= seq_num) {
+                    std::cerr << "Seq num " << request_seq_num << " expected " <<  seq_num << std::endl;
+                    out_queue.push(request, seq_num);
+                    request = NULL;
+                    isExpectedPacket = (request_seq_num == seq_num) && !(flags & SEND_BIT);
+                    isFinPacket = (flags & FIN_BIT) != 0;
+                }
             }
         }
 
         seq_num = out_queue.getNextSeqNum(seq_num);
 
-        unsigned char response[HEADER_LEN] = {0};
-        set_flags(response, ACK_BIT);
-        set_seq_num(response, seq_num);
-        set_checksum(response);
-        ucpSendTo(ucp_sock, response, HEADER_LEN, &addr);
+        if (isFinPacket) {
+            std::cerr << "Closing in recv" << std::endl;
+            handleClose();
+        } else {
+            unsigned char response[HEADER_LEN] = {0};
+            set_flags(response, ACK_BIT);
+            set_seq_num(response, seq_num);
+            set_checksum(response);
+            ucpSendTo(ucp_sock, response, HEADER_LEN, &addr);
+        }
 
         if (badPacket || !isExpectedPacket) continue;
         break;
@@ -281,10 +301,19 @@ int RcsConn::recv(void * buf, int maxBytes) {
 int RcsConn::send(const void * buf, int numBytes) {
     if (closed) return -1;
 
+    std::cerr << "sending" << seq_num << std::endl;
     ucpSetSockRecvTimeout(ucp_sock, SEND_TIMEOUT);
 
+    int bytesSent = -1;
+
+    unsigned char firstPacket[HEADER_LEN] = {0};
+    set_flags(firstPacket, SEND_BIT);
+    set_seq_num(firstPacket, seq_num);
+    set_checksum(firstPacket);
+    bool sentFirstPacket = false;
+
     const unsigned char * charBuf = (const unsigned char *) buf;
-    unsigned int packet_seq_num = seq_num;
+    unsigned int packet_seq_num = seq_num + 1;
     for (const unsigned char * chunk = charBuf; chunk - charBuf < numBytes; chunk += MAX_DATA_SIZE) {
         unsigned int dataSize = std::min(MAX_DATA_SIZE, (int) (numBytes - (chunk - charBuf)));
         unsigned char * packet = new unsigned char[dataSize + HEADER_LEN];
@@ -307,66 +336,106 @@ int RcsConn::send(const void * buf, int numBytes) {
     unsigned int unsuccessful_reads = 0;
 
     while (!queue.empty()) {
-        while (next_seq_num < seq_num + WINDOW_SIZE) {
-            try {
-                //std::cerr << "Sending packet " << get_seq_num(queue.at(next_seq_num - seq_num)) << " expected " << next_seq_num << std::endl;
-                ucpSendTo(ucp_sock, queue.at(next_seq_num - seq_num), get_length(queue.at(next_seq_num - seq_num)) + HEADER_LEN, &destination);
-            } catch (const std::out_of_range& oor) {
-                break;
+        if (!sentFirstPacket) {
+            ucpSendTo(ucp_sock, firstPacket, HEADER_LEN, &destination);
+        } else {
+            while (next_seq_num < seq_num + WINDOW_SIZE) {
+                try {
+                    std::cerr << "Sending packet " << get_seq_num(queue.at(next_seq_num - seq_num)) << " expected " << next_seq_num << std::endl;
+                    ucpSendTo(ucp_sock, queue.at(next_seq_num - seq_num), get_length(queue.at(next_seq_num - seq_num)) + HEADER_LEN, &destination);
+                } catch (const std::out_of_range& oor) {
+                    break;
+                }
+                next_seq_num++;
             }
-            next_seq_num++;
         }
 
         unsigned char response[HEADER_LEN] = {0};
         while (1) {
             errno = 0;
             int length = ucpRecvFrom(ucp_sock, response, HEADER_LEN, &destination);
-            if (errno & (EAGAIN | EWOULDBLOCK)) {
+            if ((errno == EAGAIN) || (errno == EWOULDBLOCK)) {
                 unsuccessful_reads++;
                 if (unsuccessful_reads == MAX_SEND_RETRIES) {
-                    //std::cerr << "MAX_SEND_RETRIES" << std::endl;
-                    close();
-                    return -1;
+                    std::cerr << "MAX_SEND_RETRIES" << std::endl;
+                    handleClose();
+                    return bytesSent;
                 }
                 next_seq_num = get_seq_num(queue.front());
                 break;
             }
             unsuccessful_reads = 0;
 
-            if (errno & ECONNRESET) {
-                close();
-                return -1;
-            }
-            if (length < 0) return length;
+            if (length < 0) return bytesSent;
 
-            //std::cerr << "Got packet" << std::endl;
+            std::cerr << "Got packet" << std::endl;
             if (get_length(response) != length - HEADER_LEN) break;
             if (is_corrupt(response)) break;
-            //std::cerr << "Seq num " << get_seq_num(response) << " expected " << seq_num + 1 << std::endl;
-            if (get_flags(response) & SYN_BIT) {
+            std::cerr << "Seq num " << get_seq_num(response) << " expected " << seq_num + 1 << std::endl;
+
+            unsigned short flags = get_flags(response);
+            if (flags != ACK_BIT && flags != SEND_BIT && flags != FIN_BIT) {
                 set_flags(response, ACK_BIT);
-                set_seq_num(response, 0);
+                set_seq_num(response, seq_num);
                 set_length(response, 0);
                 set_checksum(response);
                 ucpSendTo(ucp_sock, response, HEADER_LEN, &destination);
                 break;
             }
-            if (get_seq_num(response) <= seq_num) continue;
 
+            if (get_seq_num(response) <= seq_num) continue;
             seq_num = get_seq_num(response);
+
+            if (!sentFirstPacket) {
+                bytesSent = 0;
+                sentFirstPacket = true;
+            }
+
             while (!queue.empty() && get_seq_num(queue.front()) < seq_num) {
+                bytesSent += get_length(queue.front());
                 delete[] queue.front();
                 queue.pop_front();
+            }
+
+            if (get_flags(response) & SEND_BIT) return bytesSent;
+            if (get_flags(response) & FIN_BIT) {
+                handleClose();
+                return bytesSent;
             }
             break;
         }
     }
 
-    return numBytes;
+    return bytesSent;
 }
 
 int RcsConn::close() {
     if (closed) return 0;
+
+    std::cerr << "close " << seq_num << std::endl;
+    ucpSetSockRecvTimeout(ucp_sock, CLOSE_TIMEOUT);
+
+    unsigned char request[HEADER_LEN] = {0};
+    unsigned char response[HEADER_LEN] = {0};
+
+    set_flags(request, FIN_BIT);
+    set_seq_num(request, seq_num);
+    set_checksum(request);
+
+    for(int i = 0; i < MAX_CLOSE_RETRIES; i++) {
+        std::cerr << "Sending FIN. attempt " << i << std::endl;
+        ucpSendTo(ucp_sock, request, HEADER_LEN, &destination);
+
+        errno = 0;
+        int length = ucpRecvFrom(ucp_sock, response, HEADER_LEN, &destination);
+        if ((errno == EAGAIN) || (errno == EWOULDBLOCK)) continue;
+        if (length < 0) break;
+        if (get_length(response) != length - HEADER_LEN) continue;
+        if (is_corrupt(response)) continue;
+        if (get_seq_num(response) <= seq_num) continue;
+        if ((get_flags(response) & ACK_BIT) != ACK_BIT) continue;
+        break;
+    }
 
     closed = true;
     return ucpClose(ucp_sock);

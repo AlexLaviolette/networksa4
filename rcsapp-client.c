@@ -60,11 +60,11 @@ int main(int argc, char *argv[]) {
     }
 
     if(rcsGetSockName(s, &a) < 0) {
-	fprintf(stderr, "rcsGetSockName() failed. Exiting...\n");
+    fprintf(stderr, "rcsGetSockName() failed. Exiting...\n");
         exit(0);
     }
     
-    unsigned char buf[256];
+    unsigned char buf[100000];
     int nread = -1;
     
     a.sin_family = AF_INET;
@@ -78,15 +78,16 @@ int main(int argc, char *argv[]) {
         perror("connect"); exit(1);
     }
     
-    while((nread = read(STDIN_FILENO, buf, 256)) > 0) {
+    while((nread = read(STDIN_FILENO, buf, 100000)) > 0) {
         if(rcsSend(s, buf, nread) < 0) {
             perror("send"); exit(1);
         }
         
-        sleep(getrand()%7);
+        //sleep(getrand()%7);
     }
     
     rcsClose(s);
     
     return 0;
 }
+

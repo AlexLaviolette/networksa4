@@ -54,7 +54,12 @@ void OutQueue::push(unsigned char * src, unsigned short cur_seq_num) {
 }
 
 int OutQueue::pop(void * dest, int maxBytes) {
+    while (!buf.empty() && (get_flags(buf.front()) & SEND_BIT)) {
+        delete[] buf.front();
+        buf.pop_front();
+    }
     if (buf.empty()) return -1;
+
     if (offset + maxBytes >= get_length(buf.front())) {
         maxBytes = get_length(buf.front()) - offset;
         memcpy(dest, buf.front() + HEADER_LEN + offset, maxBytes);
@@ -65,6 +70,7 @@ int OutQueue::pop(void * dest, int maxBytes) {
         memcpy(dest, buf.front() + HEADER_LEN + offset, maxBytes);
         offset += maxBytes;
     }
+
     return maxBytes;
 }
 
