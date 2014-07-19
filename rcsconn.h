@@ -8,11 +8,17 @@
 class RcsMap;
 
 class RcsConn {
+    // UCP socket descriptor
     unsigned int ucp_sock;
     sockaddr_in destination;
+
+    // Holds packets queued for network layer
     std::deque<unsigned char *> queue;
+
+    // Holds packets queued for application layer
     OutQueue out_queue;
-    unsigned int seq_num;
+
+    unsigned short seq_num;
     bool closed;
 
     public:

@@ -1,81 +1,87 @@
+#include <iostream>
 #include <string.h>
 #include "outqueue.h"
 #include "packet.h"
 
 OutQueue::OutQueue(): offset(0) {}
 
+// Copy constructor, create copies of packets
 OutQueue::OutQueue(const OutQueue & other): offset(other.offset) {
-    for (firstqueue::const_iterator it = other.queue.begin(); it != other.queue.end(); it++) {
+    for (FirstQueue::const_iterator it = other.first_queue.begin(); it != other.first_queue.end(); it++) {
         int len = strlen((char *)it->second);
         unsigned char * cpy = new unsigned char[len];
         memcpy(cpy, it->second, len);
-        queue[it->first] = cpy;
+        first_queue[it->first] = cpy;
     }
-    for (secondqueue::const_iterator it = other.buf.begin(); it != other.buf.end(); it++) {
+    for (SecondQueue::const_iterator it = other.second_queue.begin(); it != other.second_queue.end(); it++) {
         int len = strlen((char *)*it);
         unsigned char * cpy = new unsigned char[len];
         memcpy(cpy, *it, len);
-        buf.push_back(cpy);
+        second_queue.push_back(cpy);
     }
 }
 
+// Delete all queued packets
 OutQueue::~OutQueue() {
-    for (firstqueue::iterator it = queue.begin(); it != queue.end(); it++) {
+    for (FirstQueue::iterator it = first_queue.begin(); it != first_queue.end(); it++) {
         delete[] it->second;
     }
-    for (secondqueue::iterator it = buf.begin(); it != buf.end(); it++) {
+    for (SecondQueue::iterator it = second_queue.begin(); it != second_queue.end(); it++) {
         delete[] *it;
     }
 }
 
-void OutQueue::push(unsigned char * src, unsigned short cur_seq_num) {
-    unsigned short src_seq_num = get_seq_num(src);
+void OutQueue::push(unsigned char * packet, unsigned short & cur_seq_num) {
+    // If the packet has a smaller sequence number than current sequence number,
+    // delete the packet and don't push (this is where we address duplicate packets)
+    unsigned short src_seq_num = get_seq_num(packet);
     if (src_seq_num < cur_seq_num) {
-        delete[] src;
+        delete[] packet;
         return;
     }
 
-    firstqueue::iterator existing = queue.find(src_seq_num);
-    if (existing != queue.end()) {
+    // If the packet has already been queued, replace the existing packet
+    FirstQueue::iterator existing = first_queue.find(src_seq_num);
+    if (existing != first_queue.end()) {
         delete[] existing->second;
-        existing->second = src;
+        existing->second = packet;
     } else {
-        queue[src_seq_num] = src;
+        first_queue[src_seq_num] = packet;
     }
 
-    firstqueue::iterator it = queue.begin();
-    while (it != queue.end() && it->first == cur_seq_num) {
-        buf.push_back(it->second);
-        firstqueue::iterator temp = it;
+    // If we have filled in a sequence number "gap", then move as many packets
+    // from the first queue to the second queue as possible
+    FirstQueue::iterator it = first_queue.begin();
+    while (it != first_queue.end() && it->first == cur_seq_num) {
+        second_queue.push_back(it->second);
+        FirstQueue::iterator temp = it;
         it++;
-        queue.erase(temp);
+        first_queue.erase(temp);
         cur_seq_num++;
     }
 }
 
-int OutQueue::pop(void * dest, int maxBytes) {
-    while (!buf.empty() && (get_flags(buf.front()) & SEND_BIT)) {
-        delete[] buf.front();
-        buf.pop_front();
+int OutQueue::pop(void * buf, int maxBytes) {
+    // Disregard any queued SEND packets (see RcsConn::send())
+    while (!second_queue.empty() && (get_flags(second_queue.front()) & SEND_BIT)) {
+        delete[] second_queue.front();
+        second_queue.pop_front();
     }
-    if (buf.empty()) return -1;
+    if (second_queue.empty()) return -1;
 
-    if (offset + maxBytes >= get_length(buf.front())) {
-        maxBytes = get_length(buf.front()) - offset;
-        memcpy(dest, buf.front() + HEADER_LEN + offset, maxBytes);
-        delete[] buf.front();
-        buf.pop_front();
+    if (offset + maxBytes >= get_length(second_queue.front())) {
+        // Read all of the data from the head packet,
+        // then pop that packet off and delete it
+        maxBytes = get_length(second_queue.front()) - offset;
+        memcpy(buf, second_queue.front() + HEADER_LEN + offset, maxBytes);
+        delete[] second_queue.front();
+        second_queue.pop_front();
         offset = 0;
     } else {
-        memcpy(dest, buf.front() + HEADER_LEN + offset, maxBytes);
+        // Read "maxBytes" bytes of data from the head packet
+        memcpy(buf, second_queue.front() + HEADER_LEN + offset, maxBytes);
         offset += maxBytes;
     }
 
     return maxBytes;
 }
-
-unsigned short OutQueue::getNextSeqNum(unsigned short seq_num) {
-    if (buf.empty()) return seq_num;
-    return get_seq_num(buf.back()) + 1;
-}
-

@@ -1,6 +1,7 @@
 #include <string.h>
 #include "rcsmap.h"
 
+// Required to implement a set of sockaddr_ins
 bool RcsMap::sockaddr_comp::operator()(const sockaddr_in & a, const sockaddr_in & b) {
     return memcmp(&a, &b, sizeof(sockaddr_in)) < 0;
 }
@@ -15,6 +16,7 @@ RcsMap::~RcsMap() {
     pthread_mutex_destroy(&addr_m);
 }
 
+// Get the connection object associated with RCS socket descriptor "sockId"
 RcsConn & RcsMap::get(unsigned int sockId) {
     pthread_mutex_lock(&map_m);
     std::map<unsigned int, RcsConn>::iterator it = map.find(sockId);
@@ -26,6 +28,8 @@ RcsConn & RcsMap::get(unsigned int sockId) {
     return it->second;
 }
 
+// Create a new connection and return both the RCS socket descriptor
+// and the associated connection object
 std::pair<unsigned int, RcsConn &> RcsMap::newConn() {
     pthread_mutex_lock(&map_m);
     std::pair<unsigned int, RcsConn &> ret(nextId, map[nextId]);
@@ -34,6 +38,7 @@ std::pair<unsigned int, RcsConn &> RcsMap::newConn() {
     return ret;
 }
 
+// Has this socket address been bound to this machine already?
 bool RcsMap::isBound(const sockaddr_in & addr) {
     pthread_mutex_lock(&addr_m);
     bool bound = boundAddrs.find(addr) != boundAddrs.end();
@@ -41,6 +46,8 @@ bool RcsMap::isBound(const sockaddr_in & addr) {
     return bound;
 }
 
+// Special method for accepting new connections from a passive socket
+// (register the new address before returning)
 int RcsMap::accept(unsigned int sockId, sockaddr_in * addr) {
     int connSoc = get(sockId).accept(addr, *this);
     if (connSoc > 0) {
@@ -51,6 +58,8 @@ int RcsMap::accept(unsigned int sockId, sockaddr_in * addr) {
     return connSoc;
 }
 
+// Special method for closing connections
+// (deregister the connection's destination address before returning)
 int RcsMap::close(unsigned int sockId) {
     int ret = -1;
     pthread_mutex_lock(&map_m);
